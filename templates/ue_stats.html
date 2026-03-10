@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>UE Flow Diagram - Tejas L3 Analyzer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+  <style>
+  /* Floating tooltip */
+  #apiTooltip {
+      position: absolute;
+      background: rgba(0,0,0,0.85);
+      color: white;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      max-width: 300px;
+      z-index: 9999;
+      display: none;
+      pointer-events: none;
+      white-space: normal;
+  }
+
+      .diagram-toolbar {
+        position: sticky;
+        top: 68px;
+        z-index: 20;
+        background: #fff;
+        border: 1px solid rgba(13, 110, 253, 0.2);
+        border-radius: 10px;
+        padding: 10px 12px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+      }
+
+      .legend-items {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        row-gap: 10px;
+        column-gap: clamp(10px, 2vw, 24px);
+        margin-top: 8px;
+      }
+
+      .legend-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        flex: 0 1 auto;
+        width: max-content;
+        max-width: 100%;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        background: #f8f9fa;
+        color: #212529;
+      }
+
+      @media (max-width: 768px) {
+        .legend-items {
+          justify-content: flex-start;
+        }
+      }
+
+      .legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+      }
+  </style>
+</head>
+<body>
+
+<!-- Tooltip element -->
+<div id="apiTooltip"></div>
+
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg sticky-top navbar-dark">
+  <div class="container-fluid">
+      <a class="navbar-brand" href="/">
+          <i class="bi bi-diagram-3-fill"></i> Tejas L3 Log Analyzer
+      </a>
+      <div class="d-flex">
+          <a href="{{ url_for('search_data') }}" class="btn btn-outline-warning btn-sm me-2">
+              <i class="bi bi-search"></i> Search Data
+          </a>
+          <a href="{{ url_for('show_results') }}" class="btn btn-outline-light btn-sm me-2">
+              <i class="bi bi-arrow-left"></i> Back to Results
+          </a>
+          <a href="{{ url_for('upload_page') }}" class="btn btn-outline-light btn-sm">
+              <i class="bi bi-upload"></i> New Upload
+          </a>
+      </div>
+  </div>
+</nav>
+
+<main class="container my-5">
+
+  <div class="text-center mb-5 text-white">
+      <h1 class="display-6" style="color: black; text-shadow: 2px 2px 4px white;"><strong>UE Communication Flow Diagram</strong></h1>
+      <p class="lead" style="color: black; text-shadow: 2px 2px 4px white;"><strong>Visualize the module-to-module message sequence.</strong></p>
+  </div>
+
+  <!-- Input Form -->
+  <section class="mb-5">
+    <div class="card p-4">
+      <form class="row g-3 align-items-end" action="{{ url_for('ue_stats') }}" method="post">
+        <div class="col-12 col-sm">
+          <label for="ue_index" class="form-label fw-bold">Enter UE Index</label>
+          <input name="ue_index" id="ue_index" type="number" class="form-control" placeholder="e.g., 123" required value="{{ selected_ue if selected_ue is not none }}">
+        </div>
+        <div class="col-12 col-sm-auto">
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="bi bi-bar-chart-line-fill"></i> Generate Diagram
+          </button>
+        </div>
+      </form>
+
+      {% if valid_indices %}
+      <div class="form-text mt-3">
+        <strong>Available Indices:</strong>
+        <span class="text-monospace">{{ valid_indices | join(', ') }}</span>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Diagram Display -->
+  {% if error %}
+    <div class="alert alert-danger" role="alert">
+      <i class="bi bi-exclamation-triangle-fill"></i> {{ error }}
+    </div>
+  {% endif %}
+
+  {% if diagram_lines %}
+    <div class="btn btn-primary w-100 mb-3">
+      <h4>
+        📊 Sequence Diagram for UE {{ selected_ue }} |
+        <strong>Cell ID = {{cell_id}}</strong> |
+        <strong>RNTI ID = {{rnti_id}}</strong> |
+        {% if is_handover %}
+          {% if ho_type_info and ho_type_info.ho_type_value is not none %}
+            <span class="badge bg-warning text-dark">HO: {{ ho_type_info.ho_type_name }}</span>
+          {% else %}
+            <span class="badge bg-warning text-dark">HO: No HO type found in logs</span>
+          {% endif %}
+          {% if ho_freq_type_info and ho_freq_type_info.ho_freq_type_value is not none %}
+            <span class="badge bg-success text-white">Freq: {{ ho_freq_type_info.ho_freq_type_name }}</span>
+          {% else %}
+            <span class="badge bg-secondary text-white">Freq: N/A</span>
+          {% endif %}
+        {% endif %}
+      </h4>
+      <h7>Note: Please zoom in and click on the API to have a better understanding.</h7>
+    </div>
+
+    <!-- Download Buttons -->
+    <div class="d-flex gap-2 justify-content-end mb-2">
+      <button id="btnDownloadSVG" class="btn btn-outline-secondary btn-sm" style="color: white; background-color: blue;">
+        <i class="bi bi-filetype-svg"></i> Download Image
+      </button>
+      <!-- <button id="btnDownloadPNG" class="btn btn-outline-secondary btn-sm" title="Client-side high-res PNG">
+        <i class="bi bi-filetype-png"></i> Download PNG
+      </button>
+      <button id="btnDownloadPDF" class="btn btn-outline-secondary btn-sm" title="Generates PDF in browser then downloads via server">
+        <i class="bi bi-filetype-pdf"></i> Download PDF
+      </button> -->
+    </div>
+
+    <!-- <div id="diagramLegend" class="diagram-toolbar mb-3">
+      <div class="d-flex align-items-center justify-content-between">
+        <strong><i class="bi bi-pin-angle-fill"></i> Sticky Legend</strong>
+        <span class="text-muted small">Module colors</span>
+      </div>
+      <div id="legendItems" class="legend-items"></div>
+    </div> -->
+
+    <div class="card">
+      <div class="card-body mermaid-container text-center">
+          <div class="mermaid">
+          sequenceDiagram
+              autonumber
+              {% for line in diagram_lines %}
+              {{ line }}
+              {% endfor %}
+          </div>
+      </div>
+    </div>
+
+  {% elif selected_ue and not error %}
+    <h2 class="mb-4 text-white text-shadow">📊 Results for UE {{ selected_ue }}</h2>
+    <div class="card p-4">
+        <p class="text-muted mb-0 text-center">
+          <i class="bi bi-info-circle"></i> No SEND/RECV messages found.
+        </p>
+    </div>
+  {% endif %}
+
+</main>
+
+<footer class="mt-5 text-center">
+  © Tejas Networks Log Analyzer | All Rights Reserved
+</footer>
+
+<!-- Mermaid -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+      startOnLoad: true,
+      theme: 'forest',
+      sequence: { showSequenceNumbers: true, actorMargin: 50 }
+  });
+</script>
+
+<!-- jsPDF + svg2pdf for client-side SVG->PDF -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.2.5/dist/svg2pdf.umd.min.js"></script>
+
+<!-- Tooltip JS -->
+<script>
+// Store event data (to be injected from Python later)
+const eventData = {{ events | tojson }};
+// const importantMsgs = {{ msgs | tojson }};
+const modulePalette = [
+  "#0d6efd", "#198754", "#dc3545", "#fd7e14", "#6f42c1", "#20c997", "#d63384", "#0dcaf0", "#6610f2", "#6c757d"
+];
+const moduleColorMap = new Map();
+
+function colorForModule(name) {
+  if (!moduleColorMap.has(name)) {
+    moduleColorMap.set(name, modulePalette[moduleColorMap.size % modulePalette.length]);
+  }
+  return moduleColorMap.get(name);
+}
+
+function renderStickyLegend() {
+  const legendItems = document.getElementById("legendItems");
+  if (!legendItems) return;
+
+  const modules = [...new Set(eventData.flatMap(e => [e.sender, e.receiver]).filter(Boolean))].sort();
+  if (modules.length === 0) {
+    legendItems.innerHTML = '<span class="text-muted small">Legend will appear after diagram data is loaded.</span>';
+    return;
+  }
+
+  legendItems.innerHTML = modules.map(module => {
+    const color = colorForModule(module);
+    return `<span class="legend-chip"><span class="legend-dot" style="background:${color}"></span>${module}</span>`;
+  }).join("");
+}
+
+function extractApi(label) {
+  const match = String(label || "").trim().match(/([A-Z][A-Z0-9_]+)$/);
+  return match ? match[1] : null;
+}
+
+function waitForMermaidSvg(callback, retries = 25) {
+  const svg = document.querySelector(".mermaid svg");
+  if (svg) {
+    callback(svg);
+    return;
+  }
+  if (retries <= 0) return;
+  setTimeout(() => waitForMermaidSvg(callback, retries - 1), 120);
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    const tooltip = document.getElementById("apiTooltip");
+  renderStickyLegend();
+
+  waitForMermaidSvg((svg) => {
+    const apiEventMap = new Map();
+    const apiReadIndex = new Map();
+    for (const ev of eventData) {
+      if (!ev.api) continue;
+      if (!apiEventMap.has(ev.api)) apiEventMap.set(ev.api, []);
+      apiEventMap.get(ev.api).push(ev);
+    }
+
+        const textNodes = svg.querySelectorAll("text");
+
+        textNodes.forEach(t => {
+            const content = t.textContent.trim();
+      const api = extractApi(content);
+      if (!api) return;
+
+      const evList = apiEventMap.get(api);
+      if (!evList || evList.length === 0) return;
+
+      const currentIdx = apiReadIndex.get(api) || 0;
+      const ev = evList[currentIdx];
+            if (!ev) return;
+      apiReadIndex.set(api, currentIdx + 1);
+
+            t.style.cursor = "pointer";
+      t.style.fill = colorForModule(ev.sender);
+      t.style.fontWeight = "700";
+            t.addEventListener("click", e => {
+              // let msgsHtml = "";
+              // if (importantMsgs && importantMsgs.length > 0) {
+              //   msgsHtml = "<br><strong>Important Messages:</strong><br>";
+              //   msgsHtml += importantMsgs.slice(0, 8).map((m, i) => `${i + 1}. ${m}`).join("<br>");
+              // }
+
+                tooltip.innerHTML = `
+                    <strong>Sender:</strong> ${ev.sender}<br>
+                    <strong>Receiver:</strong> ${ev.receiver}<br>
+                    <strong>API:</strong> ${ev.api}<br>
+                    <strong>Time:</strong> ${ev.ts}<br>
+                  <strong>Message:</strong><br>${ev.message}<br>
+                `;
+
+                tooltip.style.display = "block";
+                tooltip.style.left = (e.pageX + 12) + "px";
+                tooltip.style.top = (e.pageY + 12) + "px";
+            });
+        });
+
+        document.addEventListener("click", e => {
+            if (!svg.contains(e.target)) {
+                tooltip.style.display = "none";
+            }
+        });
+          });
+});
+</script>
+
+<!-- Export (SVG/PNG client-side; PDF via backend call) -->
+<script>
+// File naming info from context
+const selectedUE = {{ (selected_ue if selected_ue is not none else 'diagram') | tojson }};
+const rntiId = {{ (rnti_id if rnti_id is not none else '') | tojson }};
+const cellId = {{ (cell_id if cell_id is not none else '') | tojson }};
+
+function buildBaseName() {
+  let base = `UE_${selectedUE}`;
+  if (cellId) base += `_CELL_${cellId}`;
+  if (rntiId) base += `_RNTI_${rntiId}`;
+  return base;
+}
+
+// Extract Mermaid SVG string and ensure white background
+function getMermaidSvgString() {
+  const svg = document.querySelector(".mermaid svg");
+  if (!svg) {
+    alert("Diagram not rendered yet.");
+    return null;
+  }
+  const cloned = svg.cloneNode(true);
+
+  // Add explicit white background rect if not present
+  if (!cloned.querySelector("rect.__bg")) {
+    const vb = cloned.getAttribute("viewBox");
+    let width = Number(cloned.getAttribute("width"));
+    let height = Number(cloned.getAttribute("height"));
+
+    if ((!width || !height) && vb) {
+      const parts = vb.split(/\s+/).map(Number);
+      width = parts[2];
+      height = parts[3];
+    }
+    if (!width || !height) {
+      // Default fallback
+      width = 1200;
+      height = 800;
+      cloned.setAttribute("width", String(width));
+      cloned.setAttribute("height", String(height));
+      cloned.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    }
+
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("class", "__bg");
+    bg.setAttribute("x", "0");
+    bg.setAttribute("y", "0");
+    bg.setAttribute("width", width);
+    bg.setAttribute("height", height);
+    bg.setAttribute("fill", "#ffffff");
+    cloned.insertBefore(bg, cloned.firstChild);
+  }
+
+  const serializer = new XMLSerializer();
+  let svgStr = serializer.serializeToString(cloned);
+  if (!svgStr.startsWith("<?xml")) {
+    svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + svgStr;
+  }
+  return svgStr;
+}
+
+// Download a Blob
+function triggerDownload(filename, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// SVG -> PNG client-side
+async function svgStringToPngBlob(svgString, scale = 2) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = (img.naturalWidth || 1200) * scale;
+      const h = (img.naturalHeight || 800) * scale;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("Canvas toBlob failed"));
+      }, "image/png");
+    };
+    img.onerror = (e) => reject(e);
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgString);
+  });
+}
+
+// SVG -> vector PDF client-side using jsPDF + svg2pdf.js
+async function svgToPdfBlob(svgString) {
+  const parser = new DOMParser();
+  const docSvg = parser.parseFromString(svgString, "image/svg+xml").documentElement;
+
+  const vb = docSvg.getAttribute("viewBox");
+  let width = Number(docSvg.getAttribute("width"));
+  let height = Number(docSvg.getAttribute("height"));
+
+  if ((!width || !height) && vb) {
+    const parts = vb.split(/\s+/).map(Number);
+    width = parts[2];
+    height = parts[3];
+  }
+  if (!width || !height) {
+    width = 1200;
+    height = 800;
+  }
+
+  // Convert px to mm (assuming 96 DPI)
+  const pxToMm = 0.2645833333;
+  const pdfWidthMm = width * pxToMm;
+  const pdfHeightMm = height * pxToMm;
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({
+    orientation: pdfWidthMm > pdfHeightMm ? "landscape" : "portrait",
+    unit: "mm",
+    format: [pdfWidthMm, pdfHeightMm]
+  });
+
+  await window.svg2pdf(docSvg, pdf, {
+    xOffset: 0,
+    yOffset: 0,
+    scale: 1.0
+  });
+
+  const blob = pdf.output("blob");
+  return blob;
+}
+
+// Helper: Blob -> base64 data URL
+async function blobToDataUrl(blob, mimetype) {
+  const arrayBuffer = await blob.arrayBuffer();
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+  return `data:${mimetype};base64,${b64}`;
+}
+
+// Backend call to return file (no server-side conversion required)
+async function sendToServerForDownload({ format, filename, dataUrl }) {
+  const resp = await fetch("{{ url_for('download_diagram') }}", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      format,
+      filename,
+      // Accepts pdf_base64 / png_base64 / svg (string)
+      ...(format === "pdf" ? { pdf_base64: dataUrl } :
+         format === "png" ? { png_base64: dataUrl } :
+         format === "svg" ? { svg: dataUrl } : {})
+    })
+  });
+
+  if (!resp.ok) {
+    const msg = await resp.text();
+    throw new Error(msg || `Server error (${resp.status})`);
+  }
+  const blob = await resp.blob();
+  triggerDownload(`${filename}.${format}`, blob);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  waitForMermaidSvg(() => {
+    const btnSVG = document.getElementById("btnDownloadSVG");
+
+    if (btnSVG) {
+      btnSVG.addEventListener("click", () => {
+        const svgStr = getMermaidSvgString();
+        if (!svgStr) return;
+        const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+        triggerDownload(`${buildBaseName()}.svg`, blob);
+      });
+    }
+  });
+});
+</script>
+
+</body>
+</html>

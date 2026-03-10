@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Analyzing Logs - Tejas L3 Analyzer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; }
+    .progress-card { max-width: 600px; margin: 0 auto; }
+    .spinner-border { width: 3rem; height: 3rem; }
+    .progress { height: 30px; font-size: 1rem; }
+    .file-list { max-height: 300px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="card progress-card shadow-lg">
+    <div class="card-body text-center p-5">
+      <div class="spinner-border text-primary mb-4" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      
+      <h4 class="mb-3">Analyzing Logs...</h4>
+      
+      <div id="progress-message" class="text-muted mb-3">Initializing...</div>
+      
+      <div class="progress mb-3">
+        <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+             role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+          <span id="progress-text">0%</span>
+        </div>
+      </div>
+      
+      <div id="file-count" class="fw-bold text-primary mb-3">Processing 0 / 0 files</div>
+      <div id="time-estimate" class="small text-info mb-3 d-none">
+        <i class="bi bi-clock"></i>
+        <span id="elapsed-time">0s</span> elapsed /
+        <span id="estimated-time">~0s</span> estimated
+      </div>
+      
+      <div id="error-message" class="alert alert-danger d-none mt-3"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let pollInterval;
+let redirectTimer;
+
+function checkProgress() {
+  fetch('/progress')
+    .then(response => response.json())
+    .then(data => {
+      if (data.error) {
+        clearInterval(pollInterval);
+        document.getElementById('error-message').textContent = data.error;
+        document.getElementById('error-message').classList.remove('d-none');
+        document.querySelector('.spinner-border').classList.add('d-none');
+        return;
+      }
+      
+      const percent = data.total > 0 ? Math.round((data.current / data.total) * 100) : 0;
+      document.getElementById('progress-bar').style.width = percent + '%';
+      document.getElementById('progress-bar').setAttribute('aria-valuenow', percent);
+      document.getElementById('progress-text').textContent = percent + '%';
+      document.getElementById('file-count').textContent = `Processing ${data.current} / ${data.total} files`;
+      document.getElementById('progress-message').textContent = data.message || 'Processing...';
+
+      const estimateBox = document.getElementById('time-estimate');
+      if ((data.estimated_time || 0) > 0) {
+        estimateBox.classList.remove('d-none');
+        const elapsed = Math.max(0, data.elapsed_time || 0);
+        const estimated = Math.max(0, data.estimated_time || 0);
+        const remain = Math.max(0, estimated - elapsed);
+        document.getElementById('elapsed-time').textContent = formatTime(elapsed);
+        document.getElementById('estimated-time').textContent = `~${formatTime(estimated)} (${formatTime(remain)} remaining)`;
+      } else {
+        estimateBox.classList.add('d-none');
+      }
+      
+      if (data.completed) {
+        clearInterval(pollInterval);
+        document.getElementById('progress-bar').classList.remove('progress-bar-animated', 'progress-bar-striped');
+        document.getElementById('progress-bar').classList.add('bg-success');
+        document.getElementById('progress-message').textContent = 'Analysis complete! Redirecting...';
+        const nextUrl = data.next_url || '/results';
+        
+        // Redirect after 1 second
+        redirectTimer = setTimeout(() => {
+          window.location.href = nextUrl;
+        }, 1000);
+      }
+    })
+    .catch(error => {
+      console.error('Progress check failed:', error);
+    });
+}
+
+function formatTime(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return secs === 0 ? `${mins}m` : `${mins}m ${secs}s`;
+}
+const techQuotes = [
+    "It works on my machine! 🤷‍♂️",
+    "99 little bugs in the code, 99 bugs in the code. Take one down, patch it around, 127 little bugs in the code! 🐛",
+    "Why do programmers prefer dark mode? Because light attracts bugs! 💡",
+    "There are only 10 types of people: those who understand binary and those who don't. 🔢",
+    "A SQL query walks into a bar, walks up to two tables and asks... 'Can I JOIN you?' 🍻",
+    "Debugging: Being the detective in a crime movie where you are also the murderer. 🔍",
+    "Copy-paste was programmed by programmers for programmers actually. 📋",
+    "Real programmers count from 0. 🔢",
+    "In theory, theory and practice are the same. In practice, they're not. 🤔",
+    "The best thing about a Boolean is even if you're wrong, you're only off by a bit. ✨",
+    "UDP is like telling someone a joke. You don't care if they get it. 😄",
+    "TCP is like telling someone a joke and making sure they got every word. 📡",
+    "Packet loss is just data going on an adventure... to nowhere. 📦",
+    "Always code as if the person who ends up maintaining your code is a violent psychopath who knows where you live. 😱",
+    "First, solve the problem. Then, write the code. 💻",
+    "Programming is 10% writing code and 90% understanding why it's not working. 🤯",
+    "The computer was born to solve problems that did not exist before. 🖥️",
+    "Code never lies, comments sometimes do. 💬",
+    "Making the simple complicated is commonplace; making the complicated simple, that's creativity. ✨",
+    "Walking on water and developing software from a specification are easy if both are frozen. ❄️",
+    "The best error message is the one that never shows up. 🎯",
+    "If debugging is the process of removing bugs, then programming must be the process of putting them in. 🐞",
+    "Good code is its own best documentation. 📚",
+    "Premature optimization is the root of all evil. ⚡",
+    "Any fool can write code that a computer can understand. Good programmers write code that humans can understand. 👥"
+];
+
+let quoteInterval = null;
+let currentQuoteIndex = 0;
+
+function showRandomQuote() {
+    const quoteElement = document.getElementById('rotating-quote');
+    if (quoteElement) {
+        currentQuoteIndex = Math.floor(Math.random() * techQuotes.length);
+        quoteElement.textContent = techQuotes[currentQuoteIndex];
+    }
+}
+
+function startQuoteRotation() {
+    const quotesSection = document.getElementById('quotes-section');
+    if (quotesSection) {
+        quotesSection.style.display = 'block';
+        showRandomQuote(); // Show first quote immediately
+        quoteInterval = setInterval(showRandomQuote, 10000); // Rotate every 10 seconds
+    }
+}
+
+function stopQuoteRotation() {
+    if (quoteInterval) {
+        clearInterval(quoteInterval);
+        quoteInterval = null;
+    }
+    const quotesSection = document.getElementById('quotes-section');
+    if (quotesSection) {
+        quotesSection.style.display = 'none';
+    }
+}
+
+// Start polling every 500ms
+pollInterval = setInterval(checkProgress, 500);
+
+// Initial check
+checkProgress();
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+  clearInterval(pollInterval);
+  if (redirectTimer) clearTimeout(redirectTimer);
+});
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+</body>
+</html>

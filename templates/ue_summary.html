@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>UE Summary - Tejas L3 Analyzer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    /* ═══════════════════════════════════════════════════════════
+       ENHANCED UI DESIGN - Premium, Clean, Beginner-Friendly
+       ═══════════════════════════════════════════════════════════ */
+    
+    /* Global Enhancements */
+    body { 
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      letter-spacing: 0.3px;
+    }
+    
+    main.container { 
+      background: rgba(255, 255, 255, 0.95);
+      padding: 2rem;
+      border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+    }
+    
+    h3.fw-bold {
+      font-size: 1.75rem;
+      letter-spacing: -0.5px;
+      color: #1a1a1a;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.05);
+      padding-bottom: 0.5rem;
+      border-bottom: 3px solid #0d6efd;
+      margin-bottom: 1.5rem !important;
+    }
+    
+    /* ━━━ Enhanced Cards ━━━ */
+    .summary-card { 
+      border-radius: 16px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+      transition: all 0.3s ease;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      overflow: hidden;
+    }
+    
+    .summary-card:hover {
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+      transform: translateY(-2px);
+    }
+    
+    .summary-card .card-header {
+      padding: 1rem 1.25rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+      background: linear-gradient(135deg, var(--header-color-1), var(--header-color-2)) !important;
+    }
+    
+    /* ━━━ Premium Stat Boxes ━━━ */
+    .stat-box { 
+      border-left: 5px solid;
+      padding: 1.25rem 1.5rem;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .stat-box::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.5) 100%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    .stat-box:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+    }
+    
+    .stat-box:hover::before {
+      opacity: 1;
+    }
+    
+    .stat-box.blue { 
+      border-color: #0d6efd;
+      background: linear-gradient(135deg, #e7f1ff 0%, #ffffff 100%);
+    }
+    .stat-box.purple { 
+      border-color: #6f42c1;
+      background: linear-gradient(135deg, #f3e8ff 0%, #ffffff 100%);
+    }
+    .stat-box.green { 
+      border-color: #198754;
+      background: linear-gradient(135deg, #d1f4e0 0%, #ffffff 100%);
+    }
+    .stat-box.red { 
+      border-color: #dc3545;
+      background: linear-gradient(135deg, #ffe6e9 0%, #ffffff 100%);
+    }
+    .stat-box.orange { 
+      border-color: #fd7e14;
+      background: linear-gradient(135deg, #fff4e6 0%, #ffffff 100%);
+    }
+    
+    .stat-box .stat-num { 
+      font-size: 2.25rem;
+      font-weight: 700;
+      line-height: 1;
+      color: #1a1a1a;
+      text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.05);
+      position: relative;
+      z-index: 1;
+    }
+    
+    .stat-box .stat-label { 
+      font-size: 0.9rem;
+      color: #666;
+      font-weight: 500;
+      margin-top: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      position: relative;
+      z-index: 1;
+    }
+    
+    /* ━━━ Enhanced Tables ━━━ */
+    .table-ue {
+      font-size: 0.9rem;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    
+    .table-ue th { 
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+      color: #1a1a1a;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+      letter-spacing: 0.5px;
+      padding: 1rem 0.75rem !important;
+      border-bottom: 2px solid #dee2e6;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+    
+    .table-ue tbody tr {
+      transition: all 0.2s ease;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .table-ue tbody tr:hover {
+      background: linear-gradient(90deg, rgba(13,110,253,0.05) 0%, rgba(13,110,253,0.02) 100%) !important;
+      box-shadow: 0 2px 8px rgba(13, 110, 253, 0.1);
+      transform: scale(1.005);
+    }
+    
+    .table-ue td {
+      padding: 0.85rem 0.75rem !important;
+      vertical-align: middle;
+      border-right: 1px solid #f5f5f5;
+    }
+    
+    .table-ue td:first-child {
+      border-left: 3px solid transparent;
+      transition: border-color 0.2s ease;
+    }
+    
+    .table-ue tbody tr:hover td:first-child {
+      border-left-color: #0d6efd;
+    }
+    
+    /* Table Responsive Container */
+    .table-responsive {
+      border-radius: 8px;
+      border: 1px solid #e9ecef;
+    }
+    
+    /* ━━━ Enhanced Badges ━━━ */
+    .badge {
+      padding: 0.4rem 0.75rem;
+      font-weight: 500;
+      font-size: 0.8rem;
+      border-radius: 6px;
+      letter-spacing: 0.3px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      transition: all 0.2s ease;
+    }
+    
+    .badge:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+    
+    .badge-success { 
+      background: linear-gradient(135deg, #198754 0%, #157347 100%) !important;
+    }
+    .badge-fail { 
+      background: linear-gradient(135deg, #dc3545 0%, #bb2d3b 100%) !important;
+    }
+    .badge.bg-info {
+      background: linear-gradient(135deg, #0dcaf0 0%, #0aa2c0 100%) !important;
+    }
+    .badge.bg-warning {
+      background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%) !important;
+    }
+    .badge.bg-danger {
+      background: linear-gradient(135deg, #dc3545 0%, #bb2d3b 100%) !important;
+    }
+    
+    /* ━━━ UE Link Styling ━━━ */
+    .ue-link { 
+      cursor: pointer;
+      color: #0d6efd;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: all 0.2s ease;
+      position: relative;
+      text-decoration: none;
+    }
+    
+    .ue-link::after {
+      content: '';
+      position: absolute;
+      width: 0;
+      height: 2px;
+      bottom: -2px;
+      left: 0;
+      background-color: #0d6efd;
+      transition: width 0.3s ease;
+    }
+    
+    .ue-link:hover {
+      color: #0a58ca;
+      transform: translateX(3px);
+    }
+    
+    .ue-link:hover::after {
+      width: 100%;
+    }
+    
+    /* ━━━ Color Theme Headers ━━━ */
+    .card-header.bg-primary {
+      --header-color-1: #0d6efd;
+      --header-color-2: #0a58ca;
+    }
+    
+    .card-header.bg-success {
+      --header-color-1: #198754;
+      --header-color-2: #157347;
+    }
+    
+    .card-header.bg-danger {
+      --header-color-1: #dc3545;
+      --header-color-2: #bb2d3b;
+    }
+    
+    .card-header.bg-warning {
+      --header-color-1: #ffc107;
+      --header-color-2: #e0a800;
+    }
+    
+    .card-header[style*="background-color:#6f42c1"] {
+      --header-color-1: #6f42c1;
+      --header-color-2: #59359a;
+      background: linear-gradient(135deg, #6f42c1 0%, #59359a 100%) !important;
+    }
+    
+    .card-header[style*="background-color:#fd7e14"] {
+      --header-color-1: #fd7e14;
+      --header-color-2: #dc6502;
+      background: linear-gradient(135deg, #fd7e14 0%, #dc6502 100%) !important;
+    }
+    
+    /* ━━━ Section Dividers ━━━ */
+    .card + .card {
+      margin-top: 2rem;
+    }
+    
+    /* ━━━ Icon Enhancements ━━━ */
+    .bi {
+      vertical-align: -0.125em;
+      margin-right: 0.25rem;
+    }
+    
+    /* ━━━ Tooltips (Bootstrap Native) ━━━ */
+    [title] {
+      cursor: help;
+    }
+    
+    /* ━━━ Alert Styling ━━━ */
+    .alert {
+      border-radius: 12px;
+      border-left: 5px solid;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+      font-weight: 500;
+    }
+    
+    /* ━━━ Aggregate Count Cards ━━━ */
+    .card-body h6.fw-bold {
+      color: #495057;
+      padding-bottom: 0.5rem;
+      margin-bottom: 1rem;
+      border-bottom: 2px solid #e9ecef;
+      font-size: 0.95rem;
+    }
+    
+    .card-body table.table-sm {
+      font-size: 0.9rem;
+    }
+    
+    .card-body table.table-sm td {
+      padding: 0.5rem 0.75rem;
+      color: #495057;
+    }
+    
+    .card-body table.table-sm td:last-child {
+      color: #0d6efd;
+      font-weight: 600;
+    }
+    
+    .card-body table.table-sm tr:hover {
+      background-color: rgba(13, 110, 253, 0.04);
+    }
+    
+    /* ━━━ Navbar Enhancement ━━━ */
+    .navbar {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      background: linear-gradient(135deg, #212529 0%, #343a40 100%) !important;
+    }
+    
+    /* ━━━ Scrollbar Styling ━━━ */
+    .table-responsive::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    
+    .table-responsive::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 10px;
+    }
+    
+    .table-responsive::-webkit-scrollbar-thumb {
+      background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+      border-radius: 10px;
+    }
+    
+    .table-responsive::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(135deg, #0a58ca 0%, #084298 100%);
+    }
+    
+    /* ━━━ Responsive Adjustments ━━━ */
+    @media (max-width: 768px) {
+      .stat-box .stat-num { font-size: 1.75rem; }
+      h3.fw-bold { font-size: 1.5rem; }
+      main.container { padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg sticky-top navbar-dark">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="/"><i class="bi bi-diagram-3-fill"></i> Tejas L3 Log Analyzer</a>
+    <div class="d-flex">
+      <a href="{{ url_for('search_data') }}" class="btn btn-outline-warning btn-sm me-2"><i class="bi bi-search"></i> Search Data</a>
+      <a href="{{ url_for('show_results') }}" class="btn btn-outline-light btn-sm me-2"><i class="bi bi-arrow-left"></i> Results</a>
+      <a href="{{ url_for('upload_page') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-upload"></i> New Upload</a>
+    </div>
+  </div>
+</nav>
+
+<main class="container my-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="fw-bold text-dark mb-0"><i class="bi bi-clipboard-data"></i> UE Based Summary Dashboard</h3>
+    <div class="text-muted small">
+      <i class="bi bi-info-circle"></i> Comprehensive Analysis Report
+    </div>
+  </div>
+
+  {% if not summary and not cell_setup %}
+    <div class="alert alert-warning">
+      <i class="bi bi-exclamation-circle"></i> <strong>No analysis data available.</strong> Please upload and analyze logs first.
+    </div>
+  {% else %}
+
+  <!-- ═══════════════════════════════════════════════════════════
+       ℹ️ GUIDE FOR BEGINNERS 
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="alert alert-primary" style="background: linear-gradient(135deg, #cfe2ff 0%, #e7f1ff 100%); border-left: 5px solid #0d6efd; border-radius: 12px; box-shadow: 0 4px 15px rgba(13, 110, 253, 0.15);">
+    <h6 class="alert-heading fw-bold"><i class="bi bi-info-circle-fill"></i> Understanding This Dashboard</h6>
+    <p class="mb-2"><strong>Direct Attach UEs:</strong> Devices that connect directly to the network for the first time.</p>
+    <p class="mb-2"><strong>X2AP Handover UEs:</strong> Devices that move between cells using X2 interface (direct eNB-to-eNB).</p>
+    <p class="mb-2"><strong>S1AP Handover UEs:</strong> Devices that move between cells using S1 interface (via core network).</p>
+    <p class="mb-0"><strong>Status Indicators:</strong> <span class="badge bg-success">✅ Success</span> = Complete journey | <span class="badge bg-danger">❌ Incomplete</span> = Issues detected | Double-click any UE number to view detailed journey.</p>
+  </div>
+
+  <!-- ── Cell Setup Status ── -->
+  {% if cell_setup %}
+  <div class="card summary-card shadow-sm mb-4
+    {% if cell_setup.overall_status == 'success' %}border-success{% elif cell_setup.overall_status == 'failure' %}border-danger{% else %}border-warning{% endif %}">
+    <div class="card-header fw-bold
+      {% if cell_setup.overall_status == 'success' %}bg-success text-white{% elif cell_setup.overall_status == 'failure' %}bg-danger text-white{% else %}bg-warning text-dark{% endif %}">
+      <i class="bi bi-broadcast-pin"></i> Cell Setup Status &mdash;
+      {% if cell_setup.overall_status == 'success' %}
+        <span class="badge bg-light text-success">Cell Setup Successful</span>
+      {% elif cell_setup.overall_status == 'partial' %}
+        <span class="badge bg-light text-warning">Partial (S1 Failure observed but cells configured)</span>
+      {% else %}
+        <span class="badge bg-light text-danger">Cell Setup Failed</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <!-- Milestones -->
+        <div class="col-md-7">
+          <h6 class="fw-bold text-secondary mb-2">Setup Milestones</h6>
+          <table class="table table-sm table-bordered mb-0" style="font-size:.85rem;">
+            <thead class="table-light">
+              <tr><th>Milestone</th><th class="text-center">Status</th><th>Timestamp</th></tr>
+            </thead>
+            <tbody>
+              {% for ms in cell_setup.milestones %}
+              {% if ms.found %}
+              <tr>
+                <td>{{ ms.label }}{% if ms.count > 1 %} <span class="badge bg-secondary">x{{ ms.count }}</span>{% endif %}</td>
+                <td class="text-center">
+                  {% if ms.key == 's1_setup_failure' %}
+                    <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Failure</span>
+                  {% else %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle"></i></span>
+                  {% endif %}
+                </td>
+                <td class="text-muted" style="font-size:.8rem;">{{ ms.first_time }}</td>
+              </tr>
+              {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <!-- Per-Cell Status -->
+        <div class="col-md-5">
+          <h6 class="fw-bold text-secondary mb-2">Per-Cell Status</h6>
+          {% if cell_setup.cells %}
+          <table class="table table-sm table-bordered mb-2" style="font-size:.85rem;">
+            <thead class="table-light">
+              <tr><th>Cell Index</th><th class="text-center">Status</th><th>Time</th></tr>
+            </thead>
+            <tbody>
+              {% for cell in cell_setup.cells %}
+              <tr>
+                <td class="fw-bold">{{ cell.cell_index }}</td>
+                <td class="text-center">
+                  {% if cell.configured %}
+                    <span class="badge bg-success">UP</span>
+                  {% else %}
+                    <span class="badge bg-warning text-dark">Setup Pending</span>
+                  {% endif %}
+                </td>
+                <td class="text-muted" style="font-size:.8rem;">{{ cell.setup_time }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <div class="text-muted small">No cell setup data found in logs.</div>
+          {% endif %}
+
+          {% if cell_setup.failures %}
+          <h6 class="fw-bold text-danger mt-3 mb-1"><i class="bi bi-exclamation-triangle"></i> Failures Detected</h6>
+          <ul class="mb-0" style="font-size:.85rem;">
+            {% for fail in cell_setup.failures %}
+            <li class="text-danger">{{ fail }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if summary %}
+  <!-- ═══════════════════════════════════════════════════════════
+       📊 OVERVIEW STATISTICS - Quick Metrics at a Glance
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="mb-4">
+    <h5 class="text-secondary fw-bold mb-3">
+      <i class="bi bi-speedometer2"></i> Overview Statistics
+      <span class="badge bg-secondary ms-2" style="font-size: 0.7rem;">Live Metrics</span>
+    </h5>
+  </div>
+  <div class="row g-3 mb-4">
+    <div class="col-md col-6">
+      <div class="stat-box blue">
+        <div class="stat-num"><i class="bi bi-phone-fill opacity-25" style="font-size: 1.5rem; position: absolute; right: 1rem; top: 1rem;"></i>{{ summary.totals.total_ues }}</div>
+        <div class="stat-label"><i class="bi bi-collection"></i> Total UEs Analyzed</div>
+      </div>
+    </div>
+    <div class="col-md col-6">
+      <div class="stat-box green">
+        <div class="stat-num"><i class="bi bi-plug-fill opacity-25" style="font-size: 1.5rem; position: absolute; right: 1rem; top: 1rem;"></i>{{ summary.totals.direct_attach }}</div>
+        <div class="stat-label"><i class="bi bi-link-45deg"></i> Direct Attach UEs</div>
+      </div>
+    </div>
+    <div class="col-md col-6">
+      <div class="stat-box purple">
+        <div class="stat-num"><i class="bi bi-arrow-left-right opacity-25" style="font-size: 1.5rem; position: absolute; right: 1rem; top: 1rem;"></i>{{ summary.totals.x2ap_handover }}</div>
+        <div class="stat-label"><i class="bi bi-arrows-move"></i> X2AP Handover UEs</div>
+      </div>
+    </div>
+    <div class="col-md col-6">
+      <div class="stat-box orange">
+        <div class="stat-num"><i class="bi bi-arrow-down-up opacity-25" style="font-size: 1.5rem; position: absolute; right: 1rem; top: 1rem;"></i>{{ summary.totals.s1ap_handover }}</div>
+        <div class="stat-label"><i class="bi bi-shuffle"></i> S1AP Handover UEs</div>
+      </div>
+    </div>
+    <div class="col-md col-6">
+      <div class="stat-box green">
+        <div class="stat-num"><i class="bi bi-check-circle-fill opacity-25" style="font-size: 1.5rem; position: absolute; right: 1rem; top: 1rem;"></i>{{ summary.totals.successful }}</div>
+        <div class="stat-label"><i class="bi bi-clipboard-check"></i> Successful Connections</div>
+      </div>
+    </div>
+    <div class="col-md col-6">
+      <div class="stat-box red">
+        <div class="stat-num"><i class="bi bi-x-circle-fill opacity-25" style="font-size: 1.5rem; position: absolute; right: 1rem; top: 1rem;"></i>{{ summary.totals.failed }}</div>
+        <div class="stat-label"><i class="bi bi-exclamation-triangle"></i> Failed / Incomplete</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       📋 DETAILED COUNTERS - Message-Level Analysis
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="mb-4 mt-5">
+    <h5 class="text-secondary fw-bold mb-3">
+      <i class="bi bi-list-check"></i> Detailed Message Counters
+      <span class="badge bg-info ms-2" style="font-size: 0.7rem;">Aggregate Data</span>
+    </h5>
+  </div>
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="card summary-card shadow-sm h-100">
+        <div class="card-body">
+          <h6 class="fw-bold text-secondary"><i class="bi bi-broadcast"></i> RRC Connection Counts <span class="badge bg-secondary" style="font-size: 0.65rem;">Across All UEs</span></h6>
+          <table class="table table-sm mb-0">
+            <tr><td>Connection Requests</td><td class="text-end fw-bold">{{ summary.totals.rrc_conn_req }}</td></tr>
+            <tr><td>Connection Setups</td><td class="text-end fw-bold">{{ summary.totals.rrc_conn_setup }}</td></tr>
+            <tr><td>Setup Completes</td><td class="text-end fw-bold">{{ summary.totals.rrc_conn_setup_complete }}</td></tr>
+            <tr><td>Reconfigurations</td><td class="text-end fw-bold">{{ summary.totals.rrc_reconfig }}</td></tr>
+            <tr><td>Reconfig Completes</td><td class="text-end fw-bold">{{ summary.totals.rrc_reconfig_complete }}</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card summary-card shadow-sm h-100">
+        <div class="card-body">
+          <h6 class="fw-bold text-secondary"><i class="bi bi-gear-fill"></i> ICS &amp; ERAB Counts <span class="badge bg-info" style="font-size: 0.65rem;">Context Setup</span></h6>
+          <table class="table table-sm mb-0">
+            <tr><td>ICS Requests</td><td class="text-end fw-bold">{{ summary.totals.ics_req }}</td></tr>
+            <tr><td>ICS Responses</td><td class="text-end fw-bold">{{ summary.totals.ics_resp }}</td></tr>
+            <tr><td>ERAB Setup Requests</td><td class="text-end fw-bold">{{ summary.totals.erab_setup_req }}</td></tr>
+            <tr><td>ERAB Setup Responses</td><td class="text-end fw-bold">{{ summary.totals.erab_setup_resp }}</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card summary-card shadow-sm h-100">
+        <div class="card-body">
+          <h6 class="fw-bold text-secondary"><i class="bi bi-arrow-repeat"></i> Handover &amp; Failures <span class="badge bg-warning text-dark" style="font-size: 0.65rem;">Events</span></h6>
+          <table class="table table-sm mb-0">
+            <tr><td>X2AP HO Requests</td><td class="text-end fw-bold">{{ summary.totals.ho_request }}</td></tr>
+            <tr><td>X2AP HO Request ACKs</td><td class="text-end fw-bold">{{ summary.totals.ho_request_ack }}</td></tr>
+            <tr><td>Path Switch Requests</td><td class="text-end fw-bold">{{ summary.totals.path_switch_req }}</td></tr>
+            <tr><td>Path Switch ACKs</td><td class="text-end fw-bold">{{ summary.totals.path_switch_ack }}</td></tr>
+            <tr><td>Connection Releases</td><td class="text-end fw-bold">{{ summary.totals.rrc_conn_release }}</td></tr>
+            <tr><td>RLF / Failures</td><td class="text-end fw-bold text-danger">{{ summary.totals.failures }}</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       📱 UE TABLES - Individual UE Journey Data
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="mb-4 mt-5">
+    <h5 class="text-secondary fw-bold mb-3" style="color: black;">
+      <i class="bi bi-table"></i> Per-UE Analysis Tables
+      <span class="badge bg-primary ms-2" style="font-size: 0.7rem;">Double-click any UE to view journey</span>
+    </h5>
+  </div>
+  
+  <!-- ── Direct Attach UEs ── -->
+  <div class="card summary-card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white fw-bold">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <i class="bi bi-phone"></i> Direct Attach UEs
+          <span class="badge bg-light text-primary ms-2">{{ summary.direct_attach_ues|length }} UEs</span>
+        </div>
+        <div class="small">
+          <i class="bi bi-hash"></i> UE Indices: {{ summary.direct_attach_indices|join(', ') if summary.direct_attach_indices else 'None' }}
+        </div>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      {% if summary.direct_attach_ues %}
+      <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
+        <table class="table table-sm table-striped table-hover table-ue mb-0">
+          <thead class="table-light">
+            <tr>
+              <th title="User Equipment Identifier - Double-click to view journey">UE</th>
+              <th class="text-center" title="RRC Connection Request messages sent by UE">Conn Req</th>
+              <th class="text-center" title="RRC Connection Setup messages from network">Setup</th>
+              <th class="text-center" title="RRC Setup Complete confirmations from UE">Setup Comp</th>
+              <th class="text-center" title="Initial Context Setup Request from MME">ICS Req</th>
+              <th class="text-center" title="Initial Context Setup Response to MME">ICS Resp</th>
+              <th class="text-center" title="E-RAB Setup Request messages">ERAB Req</th>
+              <th class="text-center" title="E-RAB Setup Response messages">ERAB Resp</th>
+              <th class="text-center" title="RRC Reconfiguration messages sent">Reconfig</th>
+              <th class="text-center" title="RRC Reconfiguration Complete from UE">Reconfig Comp</th>
+              <th class="text-center" title="Connection Release messages">Release</th>
+              <th class="text-center" title="Total failure events detected">Failures</th>
+              <th title="S1AP-level release cause codes">S1AP Release Cause</th>
+              <th title="RRC Re-establishment failure causes">RRE Failure Cause</th>
+              <th title="Type of RRC Re-establishment">RRE Type</th>
+              <th title="Context where failure occurred">Failure Context</th>
+              <th title="Overall UE attach status">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ue in summary.direct_attach_ues %}
+            <tr class="highlight-row">
+              <td class="fw-bold ue-link" ondblclick="window.location.href='/ue_journey/{{ ue.index }}'" title="Double-click to view UE {{ ue.index }} journey">{{ ue.index }}</td>
+              <td class="text-center">{{ ue.rrc_conn_req }}</td>
+              <td class="text-center">{{ ue.rrc_conn_setup }}</td>
+              <td class="text-center">{{ ue.rrc_conn_setup_complete }}</td>
+              <td class="text-center">{{ ue.ics_req }}</td>
+              <td class="text-center">{{ ue.ics_resp }}</td>
+              <td class="text-center">{{ ue.erab_setup_req }}</td>
+              <td class="text-center">{{ ue.erab_setup_resp }}</td>
+              <td class="text-center">{{ ue.rrc_reconfig }}</td>
+              <td class="text-center">{{ ue.rrc_reconfig_complete }}</td>
+              <td class="text-center">{{ ue.rrc_conn_release }}</td>
+              <td class="text-center">{% if ue.failures > 0 %}<span class="text-danger fw-bold">{{ ue.failures }}</span>{% else %}0{% endif %}</td>
+              <td>
+                {% if ue.s1ap_release_causes %}
+                  {% for c in ue.s1ap_release_causes %}
+                    {% if c.cause_index in [3,6,8,9,21,25,26,29] %}
+                      <span class="badge bg-danger text-white me-1" title="idx={{ c.cause_index }}">{{ c.cause_name }}</span>
+                    {% else %}
+                      <span class="badge bg-warning text-dark me-1" title="idx={{ c.cause_index }}">{{ c.cause_name }}</span>
+                    {% endif %}
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ue.rre_failure_causes %}
+                  {% for rre_cause in ue.rre_failure_causes %}
+                    <span class="badge bg-danger text-white me-1"><i class="bi bi-exclamation-triangle"></i> {{ rre_cause }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ue.rre_type %}
+                  <span class="badge bg-info text-white"><i class="bi bi-arrow-repeat"></i> {{ ue.rre_type }}</span>
+                {% else %}
+                  <span class="text-muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ue.failure_contexts %}
+                  {% for ctx in ue.failure_contexts %}
+                    <span class="badge bg-danger text-white me-1"><i class="bi bi-x-octagon"></i> {{ ctx }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ue.status == 'success' %}
+                  <span class="badge badge-success">✅ Success</span>
+                {% else %}
+                  <span class="badge badge-fail">❌ Incomplete</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="p-3 text-muted">No direct attach UEs found.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── X2AP Handover UEs ── -->
+  <div class="card summary-card shadow-sm mb-4">
+    <div class="card-header text-white fw-bold" style="background-color:#6f42c1;">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <i class="bi bi-arrow-left-right"></i> X2AP Handover UEs
+          <span class="badge bg-light text-dark ms-2">{{ summary.x2ap_handover_ues|length }} UEs</span>
+        </div>
+        <div class="small">
+          <i class="bi bi-hash"></i> UE Indices: {{ summary.x2ap_handover_indices|join(', ') if summary.x2ap_handover_indices else 'None' }}
+        </div>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      {% if summary.x2ap_handover_ues %}
+      <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
+        <table class="table table-sm table-striped table-hover table-ue mb-0">
+          <thead class="table-light">
+            <tr>
+              <th title="User Equipment Identifier - Double-click to view journey">UE</th>
+              <th title="Handover type classification">HO Type</th>
+              <th title="Frequency type during handover">Freq Type</th>
+              <th class="text-center" title="X2AP Handover Request messages">X2AP HO Req</th>
+              <th class="text-center" title="X2AP Handover Request ACK messages">X2AP HO ACK</th>
+              <th class="text-center" title="Path Switch Request messages">Path Sw</th>
+              <th class="text-center" title="Path Switch Request ACK messages">Path Sw ACK</th>
+              <th class="text-center" title="Initial Context Setup Request from MME">ICS Req</th>
+              <th class="text-center" title="Initial Context Setup Response to MME">ICS Resp</th>
+              <th class="text-center" title="RRC Reconfiguration messages sent">Reconfig</th>
+              <th class="text-center" title="RRC Reconfiguration Complete from UE">Reconfig Comp</th>
+              <th class="text-center" title="Connection Release messages">Release</th>
+              <th class="text-center" title="Total failure events detected">Failures</th>
+              <th title="S1AP-level release cause codes">S1AP Release Cause</th>
+              <th title="RRC Re-establishment failure causes">RRE Failure Cause</th>
+              <th title="Type of RRC Re-establishment">RRE Type</th>
+              <th title="Context where failure occurred">Failure Context</th>
+              <th title="Overall handover status">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ue in summary.x2ap_handover_ues %}
+            <tr class="highlight-row">
+              <td class="fw-bold ue-link" ondblclick="window.location.href='/ue_journey/{{ ue.index }}'" title="Double-click to view UE {{ ue.index }} journey">{{ ue.index }}</td>
+              <td>
+                {% if ue.ho_type_value is not none %}
+                  <span class="badge bg-info text-dark">{{ ue.ho_type_name }}</span>
+                {% else %}
+                  <span class="badge bg-warning text-dark">No HO type found</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ue.ho_freq_type_value is not none %}
+                  <span class="badge bg-success text-white">{{ ue.ho_freq_type_name }}</span>
+                {% else %}
+                  <span class="badge bg-secondary text-white">N/A</span>
+                {% endif %}
+              </td>
+              <td class="text-center">{{ ue.x2ap_ho_request }}</td>
+              <td class="text-center">{{ ue.x2ap_ho_request_ack }}</td>
+              <td class="text-center">{{ ue.path_switch_req }}</td>
+              <td class="text-center">{{ ue.path_switch_ack }}</td>
+              <td class="text-center">{{ ue.ics_req }}</td>
+              <td class="text-center">{{ ue.ics_resp }}</td>
+              <td class="text-center">{{ ue.rrc_reconfig }}</td>
+              <td class="text-center">{{ ue.rrc_reconfig_complete }}</td>
+              <td class="text-center">{{ ue.rrc_conn_release }}</td>
+              <td class="text-center">{% if ue.failures > 0 %}<span class="text-danger fw-bold">{{ ue.failures }}</span>{% else %}0{% endif %}</td>
+              <td>
+                {% if ue.s1ap_release_causes %}
+                  {% for c in ue.s1ap_release_causes %}
+                    {% if c.cause_index in [3,6,8,9,21,25,26,29] %}
+                      <span class="badge bg-danger text-white me-1" title="idx={{ c.cause_index }}">{{ c.cause_name }}</span>
+                    {% else %}
+                      <span class="badge bg-warning text-dark me-1" title="idx={{ c.cause_index }}">{{ c.cause_name }}</span>
+                    {% endif %}
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ue.rre_failure_causes %}
+                  {% for rre_cause in ue.rre_failure_causes %}
+                    <span class="badge bg-danger text-white me-1"><i class="bi bi-exclamation-triangle"></i> {{ rre_cause }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ue.rre_type %}
+                  <span class="badge bg-info text-white"><i class="bi bi-arrow-repeat"></i> {{ ue.rre_type }}</span>
+                {% else %}
+                  <span class="text-muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ue.failure_contexts %}
+                  {% for ctx in ue.failure_contexts %}
+                    <span class="badge bg-danger text-white me-1"><i class="bi bi-x-octagon"></i> {{ ctx }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ue.status == 'success' %}
+                  <span class="badge badge-success">✅ Success</span>
+                {% else %}
+                  <span class="badge badge-fail">❌ Incomplete</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="p-3 text-muted">No X2AP handover UEs found.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── S1AP Handover UEs ── -->
+  <div class="card summary-card shadow-sm mb-4">
+    <div class="card-header text-white fw-bold" style="background-color:#fd7e14;">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <i class="bi bi-arrow-down-up"></i> S1AP Handover UEs
+          <span class="badge bg-light text-dark ms-2">{{ summary.s1ap_handover_ues|length }} UEs</span>
+        </div>
+        <div class="small">
+          <i class="bi bi-hash"></i> UE Indices: {{ summary.s1ap_handover_indices|join(', ') if summary.s1ap_handover_indices else 'None' }}
+        </div>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      {% if summary.s1ap_handover_ues %}
+      <div class="table-responsive" style="max-height:400px; overflow-y:auto;">
+        <table class="table table-sm table-striped table-hover table-ue mb-0">
+          <thead class="table-light">
+            <tr>
+              <th title="User Equipment Identifier - Double-click to view journey">UE</th>
+              <th title="Handover type classification">HO Type</th>
+              <th title="Frequency type during handover">Freq Type</th>
+              <th class="text-center" title="S1AP Handover Request messages">S1AP HO Req</th>
+              <th class="text-center" title="Path Switch Request messages">Path Sw</th>
+              <th class="text-center" title="Path Switch Request ACK messages">Path Sw ACK</th>
+              <th class="text-center" title="Initial Context Setup Request from MME">ICS Req</th>
+              <th class="text-center" title="Initial Context Setup Response to MME">ICS Resp</th>
+              <th class="text-center" title="RRC Reconfiguration messages sent">Reconfig</th>
+              <th class="text-center" title="RRC Reconfiguration Complete from UE">Reconfig Comp</th>
+              <th class="text-center" title="Connection Release messages">Release</th>
+              <th class="text-center" title="Total failure events detected">Failures</th>
+              <th title="S1AP-level release cause codes">S1AP Release Cause</th>
+              <th title="RRC Re-establishment failure causes">RRE Failure Cause</th>
+              <th title="Type of RRC Re-establishment">RRE Type</th>
+              <th title="Context where failure occurred">Failure Context</th>
+              <th title="Overall handover status">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ue in summary.s1ap_handover_ues %}
+            <tr class="highlight-row">
+              <td class="fw-bold ue-link" ondblclick="window.location.href='/ue_journey/{{ ue.index }}'" title="Double-click to view UE {{ ue.index }} journey">{{ ue.index }}</td>
+              <td>
+                {% if ue.ho_type_value is not none %}
+                  <span class="badge bg-info text-dark">{{ ue.ho_type_name }}</span>
+                {% else %}
+                  <span class="badge bg-warning text-dark">No HO type found</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ue.ho_freq_type_value is not none %}
+                  <span class="badge bg-success text-white">{{ ue.ho_freq_type_name }}</span>
+                {% else %}
+                  <span class="badge bg-secondary text-white">N/A</span>
+                {% endif %}
+              </td>
+              <td class="text-center">{{ ue.s1ap_ho_request }}</td>
+              <td class="text-center">{{ ue.path_switch_req }}</td>
+              <td class="text-center">{{ ue.path_switch_ack }}</td>
+              <td class="text-center">{{ ue.ics_req }}</td>
+              <td class="text-center">{{ ue.ics_resp }}</td>
+              <td class="text-center">{{ ue.rrc_reconfig }}</td>
+              <td class="text-center">{{ ue.rrc_reconfig_complete }}</td>
+              <td class="text-center">{{ ue.rrc_conn_release }}</td>
+              <td class="text-center">{% if ue.failures > 0 %}<span class="text-danger fw-bold">{{ ue.failures }}</span>{% else %}0{% endif %}</td>
+              <td>
+                {% if ue.s1ap_release_causes %}
+                  {% for c in ue.s1ap_release_causes %}
+                    {% if c.cause_index in [3,6,8,9,21,25,26,29] %}
+                      <span class="badge bg-danger text-white me-1" title="idx={{ c.cause_index }}">{{ c.cause_name }}</span>
+                    {% else %}
+                      <span class="badge bg-warning text-dark me-1" title="idx={{ c.cause_index }}">{{ c.cause_name }}</span>
+                    {% endif %}
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ue.rre_failure_causes %}
+                  {% for rre_cause in ue.rre_failure_causes %}
+                    <span class="badge bg-danger text-white me-1"><i class="bi bi-exclamation-triangle"></i> {{ rre_cause }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ue.rre_type %}
+                  <span class="badge bg-info text-white"><i class="bi bi-arrow-repeat"></i> {{ ue.rre_type }}</span>
+                {% else %}
+                  <span class="text-muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ue.failure_contexts %}
+                  {% for ctx in ue.failure_contexts %}
+                    <span class="badge bg-danger text-white me-1"><i class="bi bi-x-octagon"></i> {{ ctx }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if ue.status == 'success' %}
+                  <span class="badge badge-success">✅ Success</span>
+                {% else %}
+                  <span class="badge badge-fail">❌ Incomplete</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="p-3 text-muted">No S1AP handover UEs found.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── Failed / Incomplete UEs ── -->
+  {% if summary.failed_ues %}
+  <div class="mb-4 mt-5">
+    <h5 class="text-danger fw-bold mb-3">
+      <i class="bi bi-exclamation-triangle-fill"></i> Attention Required
+    </h5>
+  </div>
+  <div class="card summary-card shadow-sm mb-4 border-danger">
+    <div class="card-header bg-danger text-white fw-bold">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <i class="bi bi-exclamation-triangle"></i> Failed / Incomplete UEs
+          <span class="badge bg-light text-danger ms-2">{{ summary.failed_ues|length }} UEs</span>
+        </div>
+        <div class="small">
+          <i class="bi bi-info-circle"></i> Requires Investigation
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <ul class="mb-0">
+        {% for ue in summary.failed_ues %}
+        <li>
+          <strong class="ue-link" ondblclick="window.location.href='/ue_journey/{{ ue.index }}'" title="Double-click to view UE {{ ue.index }} journey">UE {{ ue.index }}</strong>
+          ({{ 'Handover' if ue.is_handover else 'Direct Attach' }}
+          {% if ue.is_handover %}
+            {% if ue.ho_type_value is not none %} &mdash; <span class="badge bg-info text-dark">{{ ue.ho_type_name }}</span>
+            {% else %} &mdash; <span class="badge bg-warning text-dark">No HO type found</span>
+            {% endif %}
+            {% if ue.ho_freq_type_value is not none %}
+              <span class="badge bg-success text-white ms-1">{{ ue.ho_freq_type_name }}</span>
+            {% else %}
+              <span class="badge bg-secondary text-white ms-1">Freq: N/A</span>
+            {% endif %}
+          {% endif %}) &mdash;
+          {% for reason in ue.failure_reasons %}
+            <span class="badge bg-warning text-dark me-1">{{ reason }}</span>
+          {% endfor %}
+          {% if ue.s1ap_fail_causes %}
+            <br>
+            <!-- {% for c in ue.s1ap_fail_causes %}
+              <span class="badge bg-danger text-white me-1 mt-1" title="idx={{ c.cause_index }}"><i class="bi bi-exclamation-diamond"></i> {{ c.cause_name }}</span>
+            {% endfor %} -->
+          {% endif %}
+          <!-- {% if ue.failure_contexts %}
+            <br>
+            {% for ctx in ue.failure_contexts %}
+              <span class="badge bg-danger text-white me-1 mt-1"><i class="bi bi-x-octagon"></i> FAILURE: {{ ctx }}</span>
+            {% endfor %}
+          {% endif %} -->
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <!-- No UE data but cell setup may be shown above -->
+  <div class="alert alert-info mt-3">
+    <i class="bi bi-info-circle"></i> <strong>No UE attach logs found.</strong> Only cell setup logs were detected.
+  </div>
+  {% endif %}
+
+  {% endif %}
+</main>
+<footer class="mt-5">
+    © Tejas Networks Log Analyzer | All Rights Reserved
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+</body>
+</html>

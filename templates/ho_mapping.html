@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>HO Mapping - Tejas L3 Analyzer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+  <style>
+    /* ✅ Pointer cursor */
+    .ue-index {
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    /* ✅ Left offcanvas shifted by 20% */
+    .offcanvas-start {
+      left: 20% !important;
+      width: 60% !important;
+    }
+
+    /* ✅ Right offcanvas shifted by 20% */
+    .offcanvas-end {
+      right: 20% !important;
+      width: 60% !important;
+    }
+
+    /* ✅ Small, professional hover UI */
+    .ho-stats-body {
+      max-height: 75vh;
+      overflow-y: auto;
+      background: #f8f9fa;
+      padding: 10px;
+      font-size: 12px;
+    }
+
+    .kv-table {
+      font-size: 12px;
+    }
+
+    .kv-table td {
+      vertical-align: top;
+      padding: 4px 6px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .small-key {
+      font-weight: 700;
+      color: #0d6efd;
+      white-space: nowrap;
+    }
+
+    .small-val {
+      color: #212529;
+    }
+
+    pre {
+      background: #000;
+      color: #00ff90;
+      padding: 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      white-space: pre-wrap;
+    }
+
+    /* Card wrapper for stats */
+    .ho-stats-card {
+      border: 1px solid #e3e6ea;
+      border-radius: 12px;
+      background: linear-gradient(180deg,#fff 0%, #fbfbff 100%);
+      box-shadow: 0 10px 30px rgba(13,110,253,0.08);
+      padding: 8px;
+    }
+
+    /* Events table (API / Time / Message) — rounded edges + "crazy" visuals */
+    .ho-events-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      border-radius: 12px;
+      box-shadow: 0 8px 22px rgba(0,0,0,0.12);
+      transform-origin: center;
+      transition: transform .18s ease;
+    }
+    .ho-events-table thead th {
+      padding: 10px 12px;
+      font-weight: 700;
+      color: #fff;
+      text-align: left;
+      background: linear-gradient(90deg, #6f42c1, #0d6efd);
+      border-bottom: 2px solid rgba(255,255,255,0.08);
+      font-size: 13px;
+    }
+    .ho-events-table tbody td {
+      padding: 10px 12px;
+      vertical-align: top;
+      background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(250,250,255,1));
+      font-size: 13px;
+      color: #112;
+      border-top: 1px solid rgba(13,110,253,0.03);
+    }
+    .ho-events-table tbody tr:nth-child(odd) td {
+      background: linear-gradient(180deg,#fff,#f7f9ff);
+    }
+    .ho-events-table tbody tr:hover td {
+      transform: translateX(6px);
+      transition: transform .12s ease;
+      box-shadow: inset 6px 0 0 rgba(13,110,253,0.08);
+    }
+
+    /* rounded corners: header first/last, footer first/last */
+    .ho-events-table thead th:first-child { border-top-left-radius: 12px; }
+    .ho-events-table thead th:last-child { border-top-right-radius: 12px; }
+    .ho-events-table tbody tr:last-child td:first-child { border-bottom-left-radius: 12px; }
+    .ho-events-table tbody tr:last-child td:last-child { border-bottom-right-radius: 12px; }
+
+    /* API chip */
+    .api-chip {
+      display:inline-block;
+      padding:3px 8px;
+      border-radius:999px;
+      background: linear-gradient(90deg,#ffd966,#ff8a00);
+      color:#1a1a1a;
+      font-weight:700;
+      font-size:12px;
+    }
+
+    /* small message preview style */
+    .msg-pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
+      font-size: 12px;
+      color: #1b1b1b;
+      background: rgba(13,110,253,0.03);
+      padding:6px 8px;
+      border-radius:6px;
+      display:block;
+      white-space: pre-wrap;
+    }
+
+    /* fallback kv table */
+    .ho-stats-card .ho-kv th { text-align: left; width: 28%; color: #0d6efd; }
+    .ho-stats-card .ho-kv td { text-align: left; color: #222; }
+    /* ✅ Make UE index & side header bold and eye-catching */
+.offcanvas-header h6 {
+  font-weight: 900;
+  font-size: 15px;
+  letter-spacing: 0.3px;
+}
+
+#hoLeftUe, #hoRightUe {
+  color: #dc3545;   /* red highlight */
+  font-size: 17px;
+  font-weight: 900;
+}
+
+/* ✅ Event count badge styling */
+.event-count-badge {
+  display: inline-block;
+  background: linear-gradient(90deg, #0d6efd, #6f42c1);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  margin-left: 8px;
+  box-shadow: 0 4px 10px rgba(13,110,253,0.35);
+}
+
+/* ✅ Catchy timestamp styling */
+.ho-timestamp {
+  font-weight: 800;
+  font-size: 12px;
+  color: #6f42c1;
+  background: rgba(111, 66, 193, 0.08);
+  padding: 4px 8px;
+  border-radius: 8px;
+  display: inline-block;
+  box-shadow: inset 0 0 0 1px rgba(111, 66, 193, 0.15);
+}
+/* ✅ CAPS + BOLD labels for metadata keys */
+.meta-key-caps {
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #0d6efd;
+}
+
+/* ✅ CAPS + BOLD value for SIDE (SOURCE / TARGET) */
+.side-badge {
+  display: inline-block;
+  background: linear-gradient(90deg, #198754, #20c997);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  box-shadow: 0 4px 10px rgba(25,135,84,0.35);
+}
+
+/* ✅ Already added earlier but keeping safe */
+.event-count-badge {
+  display: inline-block;
+  background: linear-gradient(90deg, #0d6efd, #6f42c1);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  margin-left: 8px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  box-shadow: 0 4px 10px rgba(13,110,253,0.35);
+}
+
+  </style>
+</head>
+
+<body>
+
+<nav class="navbar navbar-expand-lg sticky-top navbar-dark">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="{{ url_for('show_results') }}">
+      <i class="bi bi-diagram-3-fill"></i> HO Mapping
+    </a>
+    <div class="d-flex">
+      <a href="{{ url_for('search_data') }}" class="btn btn-outline-warning btn-sm me-2">
+        <i class="bi bi-search"></i> Search Data
+      </a>
+      <a href="{{ url_for('show_results') }}" class="btn btn-outline-light btn-sm me-2">
+        <i class="bi bi-arrow-left"></i> Back to Results
+      </a>
+      <a href="{{ url_for('upload_page') }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-upload"></i> New Upload
+      </a>
+    </div>
+  </div>
+</nav>
+
+<main class="container my-5">
+  <div class="row">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-body">
+
+          <h3 class="card-title text-primary fw-bold">Handover Mappings</h3>
+          <p class="small text-muted">Mapped source UE index → target UE index using short MAC-I</p>
+
+          {% if ho_map %}
+            <div class="table-responsive mb-3">
+              <table class="table table-sm table-striped align-middle text-center">
+                <thead class="table-dark">
+                  <tr>
+                    <th>Source UE Index</th>
+                    <th>Target UE Index</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for source, target in ho_map.items() %}
+                    <tr>
+                      <td class="fw-bold text-primary ue-index"
+                          data-ue="{{ source }}" data-side="source"
+                          title="Double-click for HO stats">
+                        {{ source }}
+                      </td>
+
+                      <td class="fw-bold text-success ue-index"
+                          data-ue="{{ target }}" data-side="target"
+                          title="Double-click for HO stats">
+                        {{ target }}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="alert alert-secondary">No HO mapping candidates found.</div>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ✅ LEFT OFFCANVAS -->
+<div class="offcanvas offcanvas-start" tabindex="-1" id="hoStatsLeft" style="background-color: antiquewhite;">
+  <div class="offcanvas-header">
+    <h6><strong>STATS FOR UE </strong><span id="hoLeftUe"></span><strong> (SOURCE)</strong></h6>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body ho-stats-body">
+    <div id="hoStatsLeftContent"></div>
+  </div>
+</div>
+
+<!-- ✅ RIGHT OFFCANVAS -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="hoStatsRight" style="background-color: antiquewhite;">
+  <div class="offcanvas-header">
+    <h6><strong> STATS FOR UE </strong><span id="hoRightUe"></span><strong> (TARGET)</strong></h6>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body ho-stats-body">
+    <div id="hoStatsRightContent"></div>
+  </div>
+</div>
+
+<footer class="mt-5 text-center">
+  © Tejas Networks Log Analyzer | All Rights Reserved
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+  // Helper: escape HTML
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (m) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m];
+    });
+  }
+
+  // Render nested / primitive values (fallback)
+  function renderCell(value) {
+    if (value === null) return '<span class="text-muted">null</span>';
+    const t = typeof value;
+    if (t === 'string' || t === 'number' || t === 'boolean') {
+      return escapeHtml(value);
+    }
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '<span class="text-muted">[]</span>';
+      const primitives = value.every(v => (v === null) || (typeof v !== 'object'));
+      if (primitives) return escapeHtml(value.join(', '));
+      let html = '<table class="table table-sm ho-stats-table mb-0"><tbody>';
+      for (let i = 0; i < value.length; i++) {
+        html += '<tr><th style="width:8%">' + i + '</th><td>' + renderCell(value[i]) + '</td></tr>';
+      }
+      html += '</tbody></table>';
+      return html;
+    }
+    if (t === 'object') {
+      const keys = Object.keys(value);
+      if (!keys.length) return '<span class="text-muted">{}</span>';
+      let html = '<table class="table table-sm ho-kv mb-0"><tbody>';
+      for (const k of keys) {
+        html += '<tr><th>' + escapeHtml(k) + '</th><td>' + renderCell(value[k]) + '</td></tr>';
+      }
+      html += '</tbody></table>';
+      return html;
+    }
+    return escapeHtml(String(value));
+  }
+
+  // Build events table with columns API / Time / Message
+  function renderEventsTable(arr) {
+    if (!Array.isArray(arr) || arr.length === 0) {
+      return '<div class="text-muted">No events</div>';
+    }
+
+    function pickField(obj, candidates) {
+      const lowerKeys = Object.keys(obj || {}).reduce((acc,k)=>{acc[k.toLowerCase()]=k;return acc;},{});
+      for (const c of candidates) {
+        if (lowerKeys[c]) return lowerKeys[c];
+      }
+      return null;
+    }
+
+    const sample = arr.find(x => typeof x === 'object') || {};
+    const apiKey = pickField(sample, ['api','apiname','api_name','apiid','api_id']);
+    const timeKey = pickField(sample, ['time','timestamp','ts','date','datetime']);
+    const msgKey = pickField(sample, ['message','msg','payload','text','info']);
+
+    let html = '<table class="ho-events-table"><thead><tr>';
+    html += '<th>API</th><th>Time</th><th>Message</th>';
+    html += '</tr></thead><tbody>';
+
+    for (const item of arr) {
+      let api = '', time = '', msg = '';
+      if (typeof item === 'string' || typeof item === 'number') {
+        msg = String(item);
+      } else if (typeof item === 'object' && item !== null) {
+        api = apiKey ? (item[apiKey] ?? '') : (item.api ?? item.name ?? '');
+        time = timeKey ? (item[timeKey] ?? '') : (item.time ?? item.timestamp ?? '');
+        msg = msgKey ? (item[msgKey] ?? '') : JSON.stringify(item);
+      } else {
+        msg = String(item);
+      }
+
+      const apiHtml  = api  ? `<span class="api-chip">${escapeHtml(String(api))}</span>` : '<span class="text-muted">-</span>';
+      const timeHtml = time
+            ? `<span class="ho-timestamp">${escapeHtml(String(time))}</span>`
+            : '<span class="text-muted">-</span>';
+      const msgHtml  = `<div class="msg-pre">${escapeHtml(String(msg))}</div>`;
+
+      html += `<tr><td>${apiHtml}</td><td>${timeHtml}</td><td>${msgHtml}</td></tr>`;
+    }
+
+    html += '</tbody></table>';
+    return html;
+  }
+
+  // Render full stats object inside a boxed card
+  function renderStatsTable(obj) {
+    if (Array.isArray(obj)) {
+      return '<div class="ho-stats-card">' + renderEventsTable(obj) + '</div>';
+    }
+
+    const arrCandidates = ['events','rows','items','transactions','logs','samples'];
+    for (const k of arrCandidates) {
+      if (Array.isArray(obj[k]) && obj[k].length > 0) {
+        let metaHtml = '';
+        const metadata = Object.assign({}, obj);
+        delete metadata[k];
+        if (Object.keys(metadata).length) {
+          metaHtml = '<div style="margin-bottom:8px;padding:6px;border-radius:6px;background:linear-gradient(90deg,#fff,#f7fbff)"><table class="table table-sm ho-kv mb-0"><tbody>';
+          for (const mk of Object.keys(metadata)) {
+
+            // ✅ EVENT COUNT → CAPS + BADGE
+            if (mk === "event_count") {
+                metaHtml += `
+                <tr>
+                    <th class="meta-key-caps" style="width:28%">EVENT_COUNT</th>
+                    <td>
+                    <span class="event-count-badge">
+                        ${escapeHtml(String(metadata[mk]))} EVENTS
+                    </span>
+                    </td>
+                </tr>`;
+            
+            // ✅ UE INDEX → CAPS + BIG + RED
+            } else if (mk === "ue_index") {
+                metaHtml += `
+                <tr>
+                    <th class="meta-key-caps" style="width:28%">UE_INDEX</th>
+                    <td style="font-weight:900;font-size:15px;color:#dc3545">
+                    UE-${escapeHtml(String(metadata[mk]))}
+                    </td>
+                </tr>`;
+
+            // ✅ SIDE → CAPS + BADGE (SOURCE / TARGET)
+            } else if (mk === "side") {
+                metaHtml += `
+                <tr>
+                    <th class="meta-key-caps" style="width:28%">SIDE</th>
+                    <td>
+                    <span class="side-badge">
+                        ${escapeHtml(String(metadata[mk])).toUpperCase()}
+                    </span>
+                    </td>
+                </tr>`;
+
+            // ✅ DEFAULT → CAPS KEY + Normal Value
+            } else {
+                metaHtml += `
+                <tr>
+                    <th class="meta-key-caps" style="width:28%">
+                    ${escapeHtml(mk).toUpperCase()}
+                    </th>
+                    <td>${escapeHtml(String(metadata[mk]))}</td>
+                </tr>`;
+            }
+            }                                                                                                                                            
+          metaHtml += '</tbody></table></div>';
+        }
+        return '<div class="ho-stats-card">' + metaHtml + renderEventsTable(obj[k]) + '</div>';
+      }
+    }
+
+    return '<div class="ho-stats-card"><div class="card-body">' + renderCell(obj) + '</div></div>';
+  }
+
+  // Attach double-click handlers to UE index cells and show offcanvas with formatted table
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.ue-index').forEach(function (el) {
+      if (el._bound) return;
+      el._bound = true;
+
+      el.addEventListener('dblclick', async function () {
+        const ue = this.dataset.ue;
+        const side = this.dataset.side || 'source';
+
+        const offId = side === 'target' ? 'hoStatsRight' : 'hoStatsLeft';
+        const uEl   = side === 'target' ? 'hoRightUe'     : 'hoLeftUe';
+        const cEl   = side === 'target' ? 'hoStatsRightContent' : 'hoStatsLeftContent';
+
+        document.getElementById(uEl).textContent = ue;
+        document.getElementById(cEl).innerHTML = '<div class="text-muted">Loading…</div>';
+
+        const offEl = document.getElementById(offId);
+        const off = bootstrap.Offcanvas.getOrCreateInstance(offEl);
+        off.show();
+
+        // ✅ Different endpoint based on source/target
+        const url = (side === 'target')
+          ? `/ho_stats/target/${ue}`
+          : `/ho_stats/source/${ue}`;
+
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) {
+            document.getElementById(cEl).innerHTML =
+              `<div class="text-danger">Error ${resp.status} ${resp.statusText}</div>`;
+            return;
+          }
+          const data = await resp.json();
+          document.getElementById(cEl).innerHTML = renderStatsTable(data);
+        } catch (err) {
+          document.getElementById(cEl).innerHTML = '<div class="text-danger">Error loading data</div>';
+        }
+      });
+    });
+  });
+</script>
+
+</body>
+</html>

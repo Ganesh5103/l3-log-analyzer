@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Upload Logs | Tejas L3 Log Analysis</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Bootstrap 5 CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Navbar -->
+<nav class="navbar navbar-expand-lg sticky-top navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">
+            <i class="bi bi-diagram-3-fill" style="justify-content: center;"></i> Tejas L3 Log Analyzer
+        </a>
+    </div>
+</nav>
+
+<main class="container d-flex align-items-center justify-content-center">
+    <div class="col-lg-8 col-md-10 col-sm-12">
+        <div class="card p-4">
+            <h2 class="text-center mb-3">Tejas L3 Log Analyzer</h2>
+
+            {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+            {% endif %}
+
+            <form action="{{ url_for('upload_page') }}" method="POST" enctype="multipart/form-data">
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Choose Action</label><br>
+
+                    <input type="radio" id="analyze" name="action" value="analyze" checked>
+                    <label for="analyze"><strong>Analyze Local Logs</strong></label>
+
+                    <input type="radio" id="scp_analyze" class="ms-3" name="action" value="scp_analyze">
+                    <label for="scp_analyze"><strong>Fetch from Server (SCP)</strong></label>
+
+                    <input type="radio" id="convert" class="ms-3" name="action" value="convert_binary">
+                    <label for="convert"><strong>Convert (bin → dbg) and Analyze</strong></label>
+                </div>
+
+                <!-- ANALYZE LOGS (LOCAL) -->
+                <div id="analyze-fields">
+                    <label class="form-label">Upload .dbg or .bkp Files</label>
+                    <input type="file" name="logfiles" class="form-control" multiple accept=".dbg,.bkp">
+                </div>
+
+                <!-- SCP FROM SERVER -->
+                <div id="scp-fields" style="display:none;">
+                    <label class="form-label">Server Path</label>
+                    <input type="text" name="server_path" class="form-control" placeholder="user@host:/path/to/logs" autocomplete="off">
+                    <div class="form-text mb-2">e.g. techie@10.103.23.97:/home/techie/ganesh/logs</div>
+
+                    <label class="form-label">Password</label>
+                    <input type="password" name="server_password" class="form-control" placeholder="Enter server password" autocomplete="off">
+                </div>
+
+                <!-- CONVERT LOGS -->
+                <div id="convert-fields" style="display:none;">
+                    <label class="form-label">Upload Binary .dbg Files</label>
+                    <input type="file" name="bin_files" class="form-control" multiple accept=".dbg, .bkp">
+
+                    <label class="form-label mt-3">Upload Standard CSV</label>
+                    <input type="file" name="csv_file" class="form-control" accept=".csv">
+                </div>
+
+                <button class="btn btn-primary w-100 mt-4" type="submit" id="submitBtn">Submit</button>
+            </form>
+
+            <!-- Progress Display (hidden by default) -->
+            <div id="progress-container" class="mt-4" style="display:none;">
+                <div class="alert alert-info">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong><i class="bi bi-hourglass-split"></i> Processing Files...</strong>
+                        <span id="progress-text" class="badge bg-primary">0 / 0</span>
+                    </div>
+                    <div class="progress" style="height: 25px;">
+                        <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                            0%
+                        </div>
+                    </div>
+                    <div id="progress-message" class="small text-muted mt-2"></div>
+                    <div id="time-estimate" class="small text-info mt-2" style="display:none;">
+                        <i class="bi bi-clock"></i> 
+                        <span id="elapsed-time">0s</span> elapsed / 
+                        <span id="estimated-time">~0s</span> estimated
+                    </div>
+                    
+                    <!-- Fun Quotes Section -->
+                    <div id="quotes-section" class="mt-3 p-3 bg-light rounded" style="display:none;">
+                        <div class="text-center">
+                            <i class="bi bi-chat-quote text-primary"></i>
+                            <p id="rotating-quote" class="mb-1 fst-italic"></p>
+                            <small class="text-muted">- Fellow Developer</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center mt-3">
+                <a href="/clear_results" class="small text-muted">Clear previous results</a>
+            </div>
+
+            <hr class="my-4">
+
+            <h6 class="fw-bold mb-3">
+                <i class="bi bi-clock-history"></i> Recent Sessions (max 5)
+            </h6>
+
+            {% if previous_sessions %}
+            <div class="list-group">
+                {% for session in previous_sessions %}
+                <a href="{{ url_for('open_session', session_name=session.name) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center session-link">
+                    <span><strong>{{ session.name }}</strong></span>
+                    <span>
+                        <span class="badge bg-primary rounded-pill me-2">{{ session.file_count }} file{{ 's' if session.file_count != 1 else '' }}</span>
+                        <span class="text-muted small">{{ session.timestamp }}</span>
+                    </span>
+                </a>
+                {% endfor %}
+            </div>
+            <div class="form-text mt-2">Click a session to load its old files and view results.</div>
+            {% else %}
+            <div class="text-muted small">No previous sessions yet.</div>
+            {% endif %}
+        </div>
+    </div>
+</main>
+
+<script>
+// Fun and knowledgeable quotes about coding, debugging, and networking
+const techQuotes = [
+    "It works on my machine! 🤷‍♂️",
+    "99 little bugs in the code, 99 bugs in the code. Take one down, patch it around, 127 little bugs in the code! 🐛",
+    "Why do programmers prefer dark mode? Because light attracts bugs! 💡",
+    "There are only 10 types of people: those who understand binary and those who don't. 🔢",
+    "A SQL query walks into a bar, walks up to two tables and asks... 'Can I JOIN you?' 🍻",
+    "Debugging: Being the detective in a crime movie where you are also the murderer. 🔍",
+    "Copy-paste was programmed by programmers for programmers actually. 📋",
+    "Real programmers count from 0. 🔢",
+    "In theory, theory and practice are the same. In practice, they're not. 🤔",
+    "The best thing about a Boolean is even if you're wrong, you're only off by a bit. ✨",
+    "UDP is like telling someone a joke. You don't care if they get it. 😄",
+    "TCP is like telling someone a joke and making sure they got every word. 📡",
+    "Packet loss is just data going on an adventure... to nowhere. 📦",
+    "Always code as if the person who ends up maintaining your code is a violent psychopath who knows where you live. 😱",
+    "First, solve the problem. Then, write the code. 💻",
+    "Programming is 10% writing code and 90% understanding why it's not working. 🤯",
+    "The computer was born to solve problems that did not exist before. 🖥️",
+    "Code never lies, comments sometimes do. 💬",
+    "Making the simple complicated is commonplace; making the complicated simple, that's creativity. ✨",
+    "Walking on water and developing software from a specification are easy if both are frozen. ❄️",
+    "The best error message is the one that never shows up. 🎯",
+    "If debugging is the process of removing bugs, then programming must be the process of putting them in. 🐞",
+    "Good code is its own best documentation. 📚",
+    "Premature optimization is the root of all evil. ⚡",
+    "Any fool can write code that a computer can understand. Good programmers write code that humans can understand. 👥"
+];
+
+let quoteInterval = null;
+let currentQuoteIndex = 0;
+
+function showRandomQuote() {
+    const quoteElement = document.getElementById('rotating-quote');
+    if (quoteElement) {
+        currentQuoteIndex = Math.floor(Math.random() * techQuotes.length);
+        quoteElement.textContent = techQuotes[currentQuoteIndex];
+    }
+}
+
+function startQuoteRotation() {
+    const quotesSection = document.getElementById('quotes-section');
+    if (quotesSection) {
+        quotesSection.style.display = 'block';
+        showRandomQuote(); // Show first quote immediately
+        quoteInterval = setInterval(showRandomQuote, 10000); // Rotate every 10 seconds
+    }
+}
+
+function stopQuoteRotation() {
+    if (quoteInterval) {
+        clearInterval(quoteInterval);
+        quoteInterval = null;
+    }
+    const quotesSection = document.getElementById('quotes-section');
+    if (quotesSection) {
+        quotesSection.style.display = 'none';
+    }
+}
+
+function showFields(active) {
+    document.getElementById("analyze-fields").style.display = active === "analyze" ? "block" : "none";
+    document.getElementById("scp-fields").style.display = active === "scp_analyze" ? "block" : "none";
+    document.getElementById("convert-fields").style.display = active === "convert" ? "block" : "none";
+}
+
+document.getElementById("analyze").addEventListener("change", () => showFields("analyze"));
+document.getElementById("scp_analyze").addEventListener("change", () => showFields("scp_analyze"));
+document.getElementById("convert").addEventListener("change", () => showFields("convert"));
+
+// Progress tracking
+let progressInterval = null;
+
+// Helper function to format time in a human-readable way
+function formatTime(seconds) {
+    if (seconds < 60) {
+        return `${seconds}s`;
+    } else {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        if (remainingSeconds === 0) {
+            return `${minutes}m`;
+        } else {
+            return `${minutes}m ${remainingSeconds}s`;
+        }
+    }
+}
+
+function updateProgress() {
+    fetch('/progress')
+        .then(response => response.json())
+        .then(data => {
+            if (data.active) {
+                const current = data.current || 0;
+                const total = data.total || 0;
+                const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+                
+                document.getElementById('progress-text').textContent = `${current} / ${total}`;
+                document.getElementById('progress-bar').style.width = percentage + '%';
+                document.getElementById('progress-bar').setAttribute('aria-valuenow', percentage);
+                document.getElementById('progress-bar').textContent = percentage + '%';
+                
+                if (data.message) {
+                    document.getElementById('progress-message').textContent = data.message;
+                }
+                
+                // Update time estimates with better formatting
+                const timeEstimateDiv = document.getElementById('time-estimate');
+                if (data.estimated_time && data.estimated_time > 0) {
+                    timeEstimateDiv.style.display = 'block';
+                    const elapsedTime = data.elapsed_time || 0;
+                    const estimatedTime = data.estimated_time || 0;
+                    const remainingTime = Math.max(0, estimatedTime - elapsedTime);
+                    
+                    document.getElementById('elapsed-time').textContent = formatTime(elapsedTime);
+                    document.getElementById('estimated-time').textContent = `~${formatTime(estimatedTime)} (${formatTime(remainingTime)} remaining)`;
+                    
+                    // Show quotes during processing
+                    if (!quoteInterval) {
+                        startQuoteRotation();
+                    }
+                } else {
+                    timeEstimateDiv.style.display = 'none';
+                }
+                
+                // If completed or error, stop polling and redirect
+                if (data.completed || data.error) {
+                    clearInterval(progressInterval);
+                    stopQuoteRotation();
+                    
+                    if (data.error) {
+                        document.getElementById('progress-message').textContent = 'Error: ' + data.error;
+                        document.querySelector('#progress-container .alert').classList.remove('alert-info');
+                        document.querySelector('#progress-container .alert').classList.add('alert-danger');
+                    } else {
+                        // Redirect to results after a short delay
+                        setTimeout(() => {
+                            window.location.href = '/results';
+                        }, 500);
+                    }
+                }
+            } else {
+                // Progress not active, stop polling
+                clearInterval(progressInterval);
+                stopQuoteRotation();
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching progress:', error);
+        });
+}
+
+function startProgressTracking() {
+    // Show progress container
+    document.getElementById('progress-container').style.display = 'block';
+    
+    // Disable submit button
+    document.getElementById('submitBtn').disabled = true;
+    
+    // Start polling every 500ms
+    progressInterval = setInterval(updateProgress, 500);
+    
+    // Initial update
+    updateProgress();
+}
+
+// Intercept form submission to start progress tracking
+document.querySelector('form').addEventListener('submit', function(e) {
+    const action = document.querySelector('input[name="action"]:checked').value;
+    
+    // Show progress for all actions
+    if (action === 'analyze' || action === 'convert_binary' || action === 'scp_analyze') {
+        // Don't prevent default - let form submit normally
+        // But start tracking progress after a short delay to let the request start
+        setTimeout(startProgressTracking, 1000);
+    }
+});
+
+// Check if we should auto-start progress tracking (for redirects from open_session)
+// This polls the server to see if there's an active analysis
+function checkForActiveProgress() {
+    fetch('/progress')
+        .then(response => response.json())
+        .then(data => {
+            if (data.active && !data.completed) {
+                // There's an active analysis, start tracking
+                startProgressTracking();
+            }
+        })
+        .catch(error => {
+            // Ignore errors on initial check
+            console.log('No active progress found');
+        });
+}
+
+// Check on page load
+window.addEventListener('load', function() {
+    // Delay check slightly to allow server state to update
+    setTimeout(checkForActiveProgress, 500);
+});
+
+// Intercept session link clicks to show progress immediately
+document.addEventListener('DOMContentLoaded', function() {
+    const sessionLinks = document.querySelectorAll('.session-link');
+    sessionLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+            // Show progress container immediately
+            document.getElementById('progress-container').style.display = 'block';
+            document.getElementById('progress-message').textContent = 'Loading session...';
+            
+            // Start progress tracking after a short delay
+            setTimeout(startProgressTracking, 800);
+        });
+    });
+});
+</script>
+
+</body>
+</html>
