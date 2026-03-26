@@ -13,12 +13,67 @@
     .journey-table td, .journey-table th { white-space: nowrap; padding: 2px 8px; }
     .journey-table td.msg-col { white-space: pre-wrap; word-break: break-all; max-width: 900px; }
     .separator-row td { background: #e9ecef; text-align: center; font-weight: bold; color: #6c757d; padding: 1px 8px; }
+    
+    /* RRM row styling - FULL light orange/peach background on ALL cells */
+    .rrm-row {
+      background-color: #fff3e0 !important;
+      border-left: 4px solid #ff9800;
+    }
+    .rrm-row td {
+      background-color: #fff3e0 !important;
+      border-color: #ffe0b2 !important;
+    }
+    .rrm-row:hover {
+      background-color: #ffe0b2 !important;
+    }
+    .rrm-row:hover td {
+      background-color: #ffe0b2 !important;
+    }
+    
+    /* L3 row styling - default white */
+    .l3-row {
+      background-color: #ffffff;
+    }
+    .l3-row td {
+      background-color: #ffffff;
+    }
+    .l3-row:hover {
+      background-color: #f5f5f5 !important;
+    }
+    .l3-row:hover td {
+      background-color: #f5f5f5 !important;
+    }
+    
     .highlight-match { background-color: #fff3cd; }
     .search-box { position: sticky; top: 56px; z-index: 10; background: #f8f9fa; padding: 10px 0; border-bottom: 1px solid #dee2e6; }
     .match-info { font-size: 0.85rem; }
     .current-match { background-color: #fd7e14 !important; color: #fff; }
     mark { background-color: #fff3cd; padding: 0; }
     mark.current { background-color: #fd7e14; color: #fff; }
+    
+    /* Legend styling */
+    .legend-box {
+      display: inline-flex;
+      gap: 15px;
+      padding: 8px 12px;
+      background: white;
+      border-radius: 8px;
+      border: 1px solid #dee2e6;
+      font-size: 0.85rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .legend-color {
+      width: 20px;
+      height: 12px;
+      border-radius: 3px;
+      border: 1px solid #ccc;
+    }
+    .legend-l3 { background-color: #ffffff; }
+    .legend-rrm { background-color: #fff3e0; border-left: 3px solid #ff9800; }
   </style>
 </head>
 <body>
@@ -37,8 +92,34 @@
 </nav>
 
 <main class="container-fluid my-3 px-4">
-  <h4 class="fw-bold text-dark mb-0"><i class="bi bi-journal-text"></i> UE {{ ue_index }} — Full Journey</h4>
-  <p class="text-muted small mb-2">Total log lines: {{ total_lines }}</p>
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <div>
+      <h4 class="fw-bold text-dark mb-1"><i class="bi bi-journal-text"></i> UE {{ ue_index }} — Full Journey (Chronological)</h4>
+      <p class="text-muted small mb-0">
+        Total: <strong>{{ total_lines }}</strong> lines 
+        (L3: <span class="badge bg-secondary">{{ total_l3_lines }}</span>{% if total_rrm_lines > 0 %}, RRM: <span class="badge bg-warning text-dark">{{ total_rrm_lines }}</span>{% endif %})
+      </p>
+    </div>
+    {% if total_rrm_lines > 0 %}
+    <div class="legend-box">
+      <div class="legend-item">
+        <div class="legend-color legend-l3"></div>
+        <span>L3 Logs (White rows)</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color legend-rrm"></div>
+        <span>RRM Logs (Orange rows)</span>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if rrm_debug_info %}
+  <div class="alert alert-info alert-dismissible fade show" role="alert">
+    <i class="bi bi-info-circle"></i> <strong>RRM Info:</strong> {{ rrm_debug_info }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+  {% endif %}
 
   <!-- Search Bar -->
   <div class="search-box">
@@ -79,13 +160,19 @@
       </thead>
       <tbody id="journeyBody">
         {% for row in journey_lines %}
-        {% if row.message.startswith('*****') and row.date == '' %}
+        {% if row.is_separator %}
         <tr class="separator-row" data-idx="{{ loop.index0 }}">
-          <td colspan="6">{{ row.message }}</td>
+          <td colspan="6">
+            {{ row.message }}
+            {% if row.source == 'RRM' %}<span class="badge bg-warning text-dark ms-2">RRM Block</span>{% endif %}
+          </td>
         </tr>
         {% else %}
-        <tr data-idx="{{ loop.index0 }}">
-          <td class="text-muted">{{ loop.index }}</td>
+        <tr data-idx="{{ loop.index0 }}" class="{% if row.source == 'RRM' %}rrm-row{% else %}l3-row{% endif %}">
+          <td class="text-muted">
+            {{ loop.index }}
+            {% if row.source == 'RRM' %}<i class="bi bi-hdd-network text-warning" title="RRM Log"></i>{% endif %}
+          </td>
           <td>{{ row.date }}</td>
           <td>{{ row.time }}</td>
           <td>{{ row.file }}</td>
@@ -97,6 +184,7 @@
       </tbody>
     </table>
   </div>
+
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"

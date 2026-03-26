@@ -174,13 +174,25 @@
       border-right: 1px solid #f5f5f5;
     }
     
-    .table-ue td:first-child {
+    .table-ue td:first-child,
+    .table-ue th:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      background: white;
       border-left: 3px solid transparent;
       transition: border-color 0.2s ease;
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+    }
+    
+    .table-ue th:first-child {
+      z-index: 11;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
     }
     
     .table-ue tbody tr:hover td:first-child {
       border-left-color: #0d6efd;
+      background: white;
     }
     
     /* Table Responsive Container */
@@ -378,6 +390,7 @@
     <a class="navbar-brand" href="/"><i class="bi bi-diagram-3-fill"></i> Tejas L3 Log Analyzer</a>
     <div class="d-flex">
       <a href="{{ url_for('search_data') }}" class="btn btn-outline-warning btn-sm me-2"><i class="bi bi-search"></i> Search Data</a>
+      <a href="{{ url_for('rrm_debug') }}" class="btn btn-outline-info btn-sm me-2" title="RRM Correlation Debug Info"><i class="bi bi-hdd-network"></i> RRM Debug</a>
       <a href="{{ url_for('show_results') }}" class="btn btn-outline-light btn-sm me-2"><i class="bi bi-arrow-left"></i> Results</a>
       <a href="{{ url_for('upload_page') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-upload"></i> New Upload</a>
     </div>
@@ -648,7 +661,10 @@
           <tbody>
             {% for ue in summary.direct_attach_ues %}
             <tr class="highlight-row">
-              <td class="fw-bold ue-link" ondblclick="window.location.href='/ue_journey/{{ ue.index }}'" title="Double-click to view UE {{ ue.index }} journey">{{ ue.index }}</td>
+              <td class="fw-bold ue-link" ondblclick="window.location.href='/ue_journey/{{ ue.index }}'" title="Double-click to view UE {{ ue.index }} journey">
+                {{ ue.index }}
+                {% if ue.has_rrm_data %}<span class="badge bg-info ms-1" title="RRM data available"><i class="bi bi-hdd-network"></i></span>{% endif %}
+              </td>
               <td class="text-center">{{ ue.rrc_conn_req }}</td>
               <td class="text-center">{{ ue.rrc_conn_setup }}</td>
               <td class="text-center">{{ ue.rrc_conn_setup_complete }}</td>
@@ -758,7 +774,10 @@
           <tbody>
             {% for ue in summary.x2ap_handover_ues %}
             <tr class="highlight-row">
-              <td class="fw-bold ue-link" ondblclick="window.location.href='/ue_journey/{{ ue.index }}'" title="Double-click to view UE {{ ue.index }} journey">{{ ue.index }}</td>
+              <td class="fw-bold ue-link" ondblclick="window.location.href='/ue_journey/{{ ue.index }}'" title="Double-click to view UE {{ ue.index }} journey">
+                {{ ue.index }}
+                {% if ue.has_rrm_data %}<span class="badge bg-info ms-1" title="RRM data available"><i class="bi bi-hdd-network"></i></span>{% endif %}
+              </td>
               <td>
                 {% if ue.ho_type_value is not none %}
                   <span class="badge bg-info text-dark">{{ ue.ho_type_name }}</span>
@@ -880,7 +899,10 @@
           <tbody>
             {% for ue in summary.s1ap_handover_ues %}
             <tr class="highlight-row">
-              <td class="fw-bold ue-link" ondblclick="window.location.href='/ue_journey/{{ ue.index }}'" title="Double-click to view UE {{ ue.index }} journey">{{ ue.index }}</td>
+              <td class="fw-bold ue-link" ondblclick="window.location.href='/ue_journey/{{ ue.index }}'" title="Double-click to view UE {{ ue.index }} journey">
+                {{ ue.index }}
+                {% if ue.has_rrm_data %}<span class="badge bg-info ms-1" title="RRM data available"><i class="bi bi-hdd-network"></i></span>{% endif %}
+              </td>
               <td>
                 {% if ue.ho_type_value is not none %}
                   <span class="badge bg-info text-dark">{{ ue.ho_type_name }}</span>

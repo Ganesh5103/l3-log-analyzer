@@ -53,15 +53,16 @@
 
                 <!-- ANALYZE LOGS (LOCAL) -->
                 <div id="analyze-fields">
-                    <label class="form-label">Upload .dbg or .bkp Files</label>
+                    <label class="form-label">Upload .dbg or .bkp Files (L3_EVENT_X and RRM_EVENT_X)</label>
                     <input type="file" name="logfiles" class="form-control" multiple accept=".dbg,.bkp">
+                    <div class="form-text">Upload both L3 and RRM event files for complete analysis with correlation</div>
                 </div>
 
                 <!-- SCP FROM SERVER -->
                 <div id="scp-fields" style="display:none;">
                     <label class="form-label">Server Path</label>
                     <input type="text" name="server_path" class="form-control" placeholder="user@host:/path/to/logs" autocomplete="off">
-                    <div class="form-text mb-2">e.g. techie@10.103.23.97:/home/techie/ganesh/logs</div>
+                    <div class="form-text mb-2">e.g. techie@10.103.23.97:/home/techie/ganesh/logs (will download L3_EVENT_X.dbg* and RRM_EVENT_X.dbg* files)</div>
 
                     <label class="form-label">Password</label>
                     <input type="password" name="server_password" class="form-control" placeholder="Enter server password" autocomplete="off">
@@ -114,7 +115,30 @@
                 <a href="/clear_results" class="small text-muted">Clear previous results</a>
             </div>
 
-            <hr class="my-4">
+            <!-- <hr class="my-4"> -->
+
+            <!-- RRM Logs Viewer Section -->
+            <!-- <h6 class="fw-bold mb-3">
+                <i class="bi bi-hdd-network text-warning"></i> View RRM Logs by UE Index
+            </h6>
+            
+            <form action="{{ url_for('view_rrm_by_ue') }}" method="POST" class="mb-4">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-8">
+                        <label for="rrm_ue_index" class="form-label">UE Index</label>
+                        <input type="number" class="form-control" id="rrm_ue_index" name="ue_index" 
+                               placeholder="Enter UE index (e.g., 0, 1, 2...)" min="0" required>
+                        <div class="form-text">View all RRM blocks for a specific UE</div>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-warning w-100">
+                            <i class="bi bi-eye"></i> View RRM Logs
+                        </button>
+                    </div>
+                </div>
+            </form> -->
+
+        <!-- <hr class="my-4"> -->
 
             <h6 class="fw-bold mb-3">
                 <i class="bi bi-clock-history"></i> Recent Sessions (max 5)

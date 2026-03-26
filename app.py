@@ -11,9 +11,23 @@ from io import BytesIO
 import paramiko
 import time
 import threading
-from bin_reader import bin_to_txt
-from merge import merge_files
+from l3_bin_reader import bin_to_txt, merge_files, extract_tag_from_filename
 from urllib.parse import unquote
+import rrm_parser
+import l3_rrm_correlator
+
+# Import constants and patterns from separate module
+from constants import (
+    rrc_messages_to_track,
+    HO_TYPE_ENUM,
+    HO_FREQ_TYPE_ENUM,
+    S1AP_CAUSE_ENUM,
+    S1AP_CAUSE_FAILURE,
+    REGEX_CONVERTED,
+    REGEX_LEGACY,
+    CELL_SETUP_MILESTONES,
+    MILESTONE_PATTERNS
+)
 
 app = Flask(__name__)
 
@@ -42,7 +56,6 @@ total_ue_indices_global = 0
 # Snapshot to preserve analysis data when a crash/backtrace is detected
 last_analysis_snapshot = None
 
-# Progress tracking for file analysis
 analysis_progress = {
     'active': False,
     'current': 0,
@@ -112,107 +125,6 @@ def _upload_page_context(error=None):
     _enforce_session_limit()
     sessions = _session_directories()[:MAX_SAVED_SESSIONS]
     return render_template("upload.html", error=error, previous_sessions=sessions)
-
-# -----------------------------
-# TRACKED RRC MESSAGES (original logic)
-# -----------------------------
-rrc_messages_to_track = [
-    "RRC CONNECTION REQUEST", "RRC CONNECTION REJECT", "RRC CONNECTION SETUP", "RRC CONNECTION SETUP COMPLETE",
-    "RRC CONNECTION RECONFIGURATION", "RRC CONNECTION RECONFIGURATION COMPLETE", "RRC CONNECTION RECONFIGURATION SENT",
-    "RRC CONNECTION RELEASE", "RRC Reestablishment Complete indication send to RRM", "HANDOVER REQUEST ACKNOWLEDGE",
-    "PATH SWITCH REQUEST", "PATH SWITCH REQUEST ACK", "HO NOTIFY", "RRM UE HO ADM RESPONSE", "RRM UE HO ADM REQUEST",
-    "rrc_mac_ho_rach_resource_req", "rrc_mac_ho_rach_resource_resp", "rrc_phy_create_ue_entity_req",
-    "rrc_phy_create_ue_entity_resp", "rrc_rrm_ue_ho_adm_cnf", "X2AP_MSG: HANDOVER REQUEST",
-    "X2AP_MSG: HANDOVER REQUEST ACKNOWLEDGE", "X2AP_MSG: HANDOVER REQUEST ACK",
-    "S1AP_MSG: HANDOVER REQUEST", "S1AP_MSG: ALLOCATE_MME_REQ",
-    "S1AP_MSG: INITIAL CONTEXT SETUP REQUEST", "S1AP_MSG: ERAB SETUP REQUEST", "S1AP_MSG: ERAB SETUP RESPONSE",
-    "ASN1 encoding failed.", "ASN decoding failed", "X2AP_MSG: HANDOVER CANCEL", "S1AP_MSG: HANDOVER CANCEL",
-    "X2AP_RLF_IND from RRC", "handover failure indication to RRM",
-    "RRC Connection ReEstablishment reject to UE", "Reestablishment Complete indication send to RRM",
-    "RRC CONNECTIONREESTABLISHMENT REQUEST", "RRC CONNECTION RE-ESTABLISHMENT COMPLETE",
-    "TEID:RCR UE Release timer expiry", "handover cancel to X2AP",
-    "ASN1 encoding of RLF INDICATION failed."
-]
-
-# -----------------------------
-# Handover Type Enum Mapping
-# -----------------------------
-HO_TYPE_ENUM = {
-    0: "INTRA_LTE_S1",
-    1: "LTE_TO_UTRAN",
-    2: "LTE_TO_GERAN",
-    3: "UTRAN_TO_LTE",
-    4: "GERAN_TO_LTE",
-    5: "INTRA_LTE_X2",
-    6: "INTRA_CELL",
-    7: "LTE_TO_CDMA2000_1XRTT",
-    8: "LTE_TO_CDMA2000_HRPD",
-    9: "LTE_TO_CDMA2000_CONC_1XRTT_HRPD",
-    10: "CCO",
-    11: "INTER_CELL",
-}
-
-# -----------------------------
-# Handover Frequency Type Enum Mapping
-# -----------------------------
-HO_FREQ_TYPE_ENUM = {
-    0: "HANDOVER_INTRA_FREQ",
-    1: "HANDOVER_INTER_FREQ",
-}
-
-# -----------------------------
-# S1AP UE Context Release Cause Enum
-# -----------------------------
-S1AP_CAUSE_ENUM = {
-    0: "s1ap_unspecified_2",
-    1: "s1ap_tx2relocoverall_expiry",
-    2: "s1ap_successful_handover",
-    3: "s1ap_release_due_to_eutran_generated_reason",
-    4: "s1ap_handover_cancelled",
-    5: "s1ap_partial_handover",
-    6: "s1ap_ho_failure_in_target_EPC_eNB_or_target_system",
-    7: "s1ap_ho_target_not_allowed",
-    8: "s1ap_tS1relocoverall_expiry",
-    9: "s1ap_tS1relocprep_expiry",
-    10: "s1ap_cell_not_available",
-    11: "s1ap_unknown_targetID",
-    12: "s1ap_no_radio_resources_available_in_target_cell",
-    13: "s1ap_unknown_mme_ue_s1ap_id",
-    14: "s1ap_unknown_enb_ue_s1ap_id",
-    15: "s1ap_unknown_pair_ue_s1ap_id",
-    16: "s1ap_handover_desirable_for_radio_reason",
-    17: "s1ap_time_critical_handover",
-    18: "s1ap_resource_optimisation_handover",
-    19: "s1ap_reduce_load_in_serving_cell",
-    20: "s1ap_user_inactivity",
-    21: "s1ap_radio_connection_with_ue_lost",
-    22: "s1ap_load_balancing_tau_required",
-    23: "s1ap_cs_fallback_triggered",
-    24: "s1ap_ue_not_available_for_ps_service",
-    25: "s1ap_radio_resources_not_available",
-    26: "s1ap_failure_in_radio_interface_procedure",
-    27: "s1ap_invalid_qos_combination",
-    28: "s1ap_interrat_redirection",
-    29: "s1ap_interaction_with_other_procedure",
-    30: "s1ap_unknown_E_RAB_ID",
-    31: "s1ap_multiple_E_RAB_ID_instances",
-    32: "s1ap_encryption_and_or_integrity_protection_algorithms_not_supported",
-    33: "s1ap_s1_intra_system_handover_triggered",
-    34: "s1ap_s1_inter_system_handover_triggered",
-    35: "s1ap_x2_handover_triggered",
-}
-
-# Causes that indicate a FAILURE release (UE marked as failed only for these)
-S1AP_CAUSE_FAILURE = {
-    3,   # s1ap_release_due_to_eutran_generated_reason
-    6,   # s1ap_ho_failure_in_target_EPC_eNB_or_target_system
-    8,   # s1ap_tS1relocoverall_expiry
-    9,   # s1ap_tS1relocprep_expiry
-    21,  # s1ap_radio_connection_with_ue_lost
-    25,  # s1ap_radio_resources_not_available
-    26,  # s1ap_failure_in_radio_interface_procedure
-    29,  # s1ap_interaction_with_other_procedure
-}
 
 
 def _extract_ho_type(data_map, ue_index):
@@ -396,23 +308,6 @@ def _extract_rre_type(data_map, ue_index):
     return None
 
 
-# -----------------------------
-# Precompiled regexes for performance
-# -----------------------------
-REGEX_CONVERTED = re.compile(
-    r"^(?P<date>\d{4}-\d{2}-\d{2})\s+"
-    r"(?P<time>\d{2}:\d{2}:\d{2}\.\d+)\s+"
-    r"(?P<file>[\w_.]+\.c)\s+"
-    r"(?P<line>\d+)\s+"
-    r"(?P<message>.*)$"
-)
-REGEX_LEGACY = re.compile(
-    r"^(?P<date>\d{2}\.\d{2}\.\d{4})\s+"
-    r"(?P<time>[\d:.]+)\s+"
-    r"(?P<file>[\w_.]+\.c)\s+"
-    r"(?P<line>\d+)\s+"
-    r"(?P<message>.*)$"
-)
 # -----------------------------
 # FUNCTIONS FOR HO MAPPING
 # -----------------------------
@@ -951,28 +846,6 @@ def count_rrc_messages(folder):
 # -----------------------------
 # Cell Setup Status parser
 # -----------------------------
-# Milestones tracked during cell setup (order matters for display)
-CELL_SETUP_MILESTONES = [
-    {"key": "rrc_init",           "pattern": r"ueccmd_init\.c.*Init\.",                          "label": "RRC Init"},
-    {"key": "s1ap_init",          "pattern": r"s1ap_init\.c.*Init\.",                            "label": "S1AP Init"},
-    {"key": "x2ap_init",          "pattern": r"x2ap_init\.c.*x2ap Init\.",                       "label": "X2AP Init"},
-    {"key": "oam_prov_req",       "pattern": r"API:RRC_OAM_PROVISION_REQ",                       "label": "OAM Provision REQ"},
-    {"key": "oam_prov_resp",      "pattern": r"API:RRC_OAM_PROVISION_RESP",                      "label": "OAM Provision RESP"},
-    {"key": "s1ap_oam_prov_req",  "pattern": r"API:S1AP_OAM_PROVISION_REQ",                      "label": "S1AP OAM Provision REQ"},
-    {"key": "s1ap_oam_prov_resp", "pattern": r"API:S1AP_OAM_PROVISION_RESP",                     "label": "S1AP OAM Provision RESP"},
-    {"key": "s1ap_active",        "pattern": r"S1AP has entered Active State",                   "label": "S1AP Active State"},
-    {"key": "sctp_assoc_up",      "pattern": r"SCTP Association is UP",                          "label": "SCTP Association UP"},
-    {"key": "s1_setup_sent",      "pattern": r"S1 setup request is sent",                        "label": "S1 Setup Request Sent"},
-    {"key": "s1_setup_resp",      "pattern": r"S1 SETUP RESPONSE|MME_EVENT_S1_SETUP_RSP(?!_FAIL)",  "label": "S1 Setup Response (Success)"},
-    {"key": "s1_setup_failure",   "pattern": r"S1 SETUP FAILURE",                                "label": "S1 Setup Failure"},
-    {"key": "x2ap_oam_prov_resp", "pattern": r"X2AP_OAM_PROVISION_RESP",                         "label": "X2AP OAM Provision RESP"},
-    {"key": "cell_setup_req",     "pattern": r"API:RRC_RRM_CELL_SETUP_REQ",                      "label": "Cell Setup REQ"},
-    {"key": "cell_setup_resp",    "pattern": r"API:RRC_RRM_CELL_SETUP_RESP",                     "label": "Cell Setup RESP"},
-    {"key": "cell_start_ind",     "pattern": r"API:CSC_OAMH_CELL_START_IND",                     "label": "Cell Start IND"},
-    {"key": "cell_configured",    "pattern": r"is_cell_configured\s*=\s*TRUE",                   "label": "Cell Configured = True"},
-]
-
-
 def parse_cell_setup_status(folder):
     """
     Parse cell-level (non-UE) setup milestones from L3_EVENT_X* log files.
@@ -1203,12 +1076,13 @@ def _scp_download_and_analyze_worker(username, hostname, remote_dir, password, s
         analysis_progress['message'] = 'Fetching remote file list...'
         analysis_progress['elapsed_time'] = int(time.time() - analysis_progress['start_time'])
 
-        stdin, stdout, stderr = ssh.exec_command(f'ls {remote_dir}/L3_EVENT_X.dbg* 2>/dev/null')
+        # Get both L3 and RRM event files
+        stdin, stdout, stderr = ssh.exec_command(f'ls {remote_dir}/L3_EVENT_X.dbg* {remote_dir}/RRM_EVENT_X.dbg* 2>/dev/null')
         remote_files = [line.strip() for line in stdout.read().decode().splitlines() if line.strip()]
         err_output = stderr.read().decode().strip()
 
         if not remote_files:
-            raise RuntimeError(f"No L3_EVENT_X.dbg* files found at {remote_dir}. {err_output}".strip())
+            raise RuntimeError(f"No L3_EVENT_X.dbg* or RRM_EVENT_X.dbg* files found at {remote_dir}. {err_output}".strip())
 
         analysis_progress.update({
             'current': 0,
@@ -1370,12 +1244,13 @@ def analyze_logs(folder):
         _touch_session(resolved_folder)
         _enforce_session_limit()
 
-    # Pick only files that match Option B: startswith L3_EVENT_X and contain .dbg or .bkp
+    # Pick files that match: L3_EVENT_X or RRM_EVENT_X and contain .dbg or .bkp
     chosen_files = [f for f in sorted(os.listdir(resolved_folder))
-                    if (f.lower().startswith("l3_event_x") and (".dbg" in f.lower() or ".bkp" in f.lower()))]
+                    if ((f.lower().startswith("l3_event_x") or f.lower().startswith("rrm_event_x")) 
+                        and (".dbg" in f.lower() or ".bkp" in f.lower()))]
 
     if not chosen_files:
-        return _upload_page_context(error="No L3_EVENT_X*.dbg/.bkp files found for analysis in selected folder.")
+        return _upload_page_context(error="No L3_EVENT_X*.dbg/.bkp or RRM_EVENT_X*.dbg/.bkp files found for analysis in selected folder.")
 
     # Calculate total file size for time estimation
     total_size_mb = sum(os.path.getsize(os.path.join(resolved_folder, f)) / (1024 * 1024) for f in chosen_files)
@@ -1428,6 +1303,28 @@ def analyze_logs(folder):
         analysis_progress['message'] = 'Parsing cell setup status...'
         cell_setup_local = parse_cell_setup_status(session_folder)
 
+        # RRM log correlation using strict event-driven rules
+        analysis_progress['message'] = 'Correlating L3 and RRM logs...'
+        try:
+            # NEW: Event-driven L3-RRM correlation
+            print("\n" + "="*80)
+            print("STARTING STRICT L3-RRM CORRELATION")
+            print("="*80)
+            l3_rrm_correlator.initialize_correlation(resolved_folder, combined_map)
+            corr_stats = l3_rrm_correlator.get_correlation_stats()
+            print(f"✅ L3-RRM correlation complete:")
+            print(f"   - RRM log lines: {corr_stats['rrm_log_lines']}")
+            print(f"   - UEs with RRM data: {corr_stats['ues_with_rrm']}")
+            print(f"   - Total RRM blocks: {corr_stats['total_rrm_blocks']}")
+            print(f"   - Time window: {corr_stats['time_window_seconds']}s")
+            print("="*80 + "\n")
+        except Exception as e:
+            print(f"⚠️ L3-RRM correlation failed: {e}")
+            import traceback
+            traceback.print_exc()
+            # Continue without RRM data - not critical
+            pass
+
         # Save snapshot (always) so proceed works even if no crash
         last_analysis_snapshot = {
             'ue_data_map': combined_map.copy(),
@@ -1437,6 +1334,7 @@ def analyze_logs(folder):
             'valid_indices_global': sorted(combined_map.keys()),
             'total_ue_indices_global': len(combined_map),
             'cell_setup_status': cell_setup_local,
+            'rrm_journeys': l3_rrm_correlator.get_correlator().ue_rrm_blocks,  # Add RRM blocks to snapshot
         }
 
         # Cleanup temp files
@@ -1501,8 +1399,8 @@ def upload_page():
             bin_files = request.files.getlist('bin_files')
             csv_file = request.files.get('csv_file')
 
-            if not bin_files or not csv_file:
-                return _upload_page_context(error="Please upload both BIN files and a CSV file.")
+            if not bin_files or not csv_file or not csv_file.filename:
+                return _upload_page_context(error="Please upload BIN files and the CSV mapping file.")
 
             session_folder = os.path.join(UPLOAD_FOLDER, f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
             os.makedirs(session_folder, exist_ok=True)
@@ -1512,45 +1410,70 @@ def upload_page():
             # Save BIN files in upload order
             bin_paths = []
             for file in bin_files:
+                if not file or not file.filename:
+                    continue
                 path = os.path.join(session_folder, file.filename)
                 file.save(path)
                 bin_paths.append(path)
 
+            if not bin_paths:
+                shutil.rmtree(session_folder, ignore_errors=True)
+                return _upload_page_context(error="No BIN files were uploaded.")
+
             # Save CSV mapping
             csv_path = os.path.join(session_folder, csv_file.filename)
             csv_file.save(csv_path)
+            csv_tag = extract_tag_from_filename(os.path.basename(csv_file.filename))
 
-            # Convert BIN -> TXT in upload order
-            txt_files = []
+            def _converted_filename(original_name: str) -> str:
+                if "_BIN" in original_name:
+                    candidate = original_name.replace("_BIN", "_X", 1)
+                else:
+                    candidate = original_name.replace("BIN", "X", 1)
+                return candidate or original_name
+
+            converted_files = []
+            conversion_notes = []
+
             for bin_path in bin_paths:
-                txt_file = bin_path + ".txt"
-                bin_to_txt(bin_path, txt_file)
-                txt_files.append(txt_file)
+                bin_name = os.path.basename(bin_path)
+                intermediate_path = os.path.join(session_folder, f"intermediate_{bin_name}.txt")
 
-            # Create final merged file name (starts with L3_EVENT_X and ends with .bkp)
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            merged_filename = f"L3_EVENT_X.dbg_{timestamp}.bkp"
-            merged_output = os.path.join(session_folder, merged_filename)
+                if not bin_name.upper().startswith("L3_EVENT_BIN"):
+                    conversion_notes.append(f"Skipping {bin_name} (name must start with L3_EVENT_BIN).")
+                    continue
 
-            # Merge in same order
-            for txt_file in txt_files:
-                # Basic tag check (if your CSV has specific tag location this logic may be adjusted)
-                with open(txt_file, "r", encoding="utf-8", errors="ignore") as tf:
-                    first_line = tf.readline().strip() if tf else ""
-                    # keep behavior: if tag mismatch, return error
-                    # (original code used csv_path[44:69] which is fragile; keep simple check)
-                    # If you rely on specific tag region, reinstate that exact check.
-                merge_files(csv_path, txt_file, merged_output)
+                try:
+                    bin_to_txt(bin_path, intermediate_path)
+                    with open(intermediate_path, "r", encoding="utf-8", errors="ignore") as tf:
+                        first_line = tf.readline().strip()
 
-            # Read merged content for preview
-            if os.path.exists(merged_output):
-                with open(merged_output, "r", encoding="utf-8", errors="ignore") as f:
-                    content = f.read()
-            else:
-                content = "Merge failed. No output file generated."
+                    found_tag = first_line or "(empty)"
+                    expected_tag = csv_tag or "(empty)"
 
-            # Show only final merged file (folder = session_folder)
-            return render_template('view_logs.html', files=[merged_filename], folder=session_folder, output=content)
+                    if first_line != csv_tag:
+                        conversion_notes.append(
+                            f"Skipping {bin_name}: tag mismatch (expected {expected_tag}, found {found_tag})."
+                        )
+                        continue
+
+                    output_name = _converted_filename(bin_name)
+                    output_path = os.path.join(session_folder, output_name)
+                    merge_files(csv_path, intermediate_path, output_path)
+                    converted_files.append(output_name)
+                except Exception as exc:
+                    conversion_notes.append(f"Failed to convert {bin_name}: {exc}")
+                finally:
+                    if os.path.exists(intermediate_path):
+                        os.remove(intermediate_path)
+
+            if not converted_files:
+                message = conversion_notes[0] if conversion_notes else "Conversion failed. No output files were generated."
+                return _upload_page_context(error=message)
+
+            conversion_notes.insert(0, f"Converted {len(converted_files)} file(s) using CSV tag {csv_tag or '(empty)'}.")
+
+            return render_template('view_logs.html', files=converted_files, folder=session_folder, messages=conversion_notes)
 
         # ===================================================
         # CASE 2 — ANALYZE UPLOADED L3_EVENT_X FILES (old logic)
@@ -1558,7 +1481,7 @@ def upload_page():
         if action == "analyze":
             files = request.files.getlist("logfiles")
             if not any(f.filename for f in files):
-                return _upload_page_context(error="Upload L3_EVENT_X .dbg/.bkp files")
+                return _upload_page_context(error="Upload L3_EVENT_X and/or RRM_EVENT_X .dbg/.bkp files")
 
             session_folder = os.path.join(UPLOAD_FOLDER, f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
             os.makedirs(session_folder, exist_ok=True)
@@ -2032,9 +1955,88 @@ def clear_results():
     rrc_counts.clear()
     insights_global.clear()
     valid_indices_global.clear()
+    rrm_parser.clear_rrm_journeys()
+    l3_rrm_correlator.clear_correlation()  # Clear new correlation data
     global last_analysis_snapshot
     last_analysis_snapshot = None
     return redirect(url_for("upload_page"))
+
+
+@app.route("/view_rrm_by_ue", methods=["POST"])
+def view_rrm_by_ue():
+    """View RRM logs for a specific UE index."""
+    ue_index_str = request.form.get("ue_index")
+    
+    if not ue_index_str or not ue_index_str.isdigit():
+        sessions = _session_directories()[:MAX_SAVED_SESSIONS]
+        return render_template("upload.html", 
+                             error="Please enter a valid UE index (number)",
+                             previous_sessions=sessions)
+    
+    ue_index = int(ue_index_str)
+    
+    # Get correlated RRM blocks for this UE using new correlator
+    correlated_blocks = l3_rrm_correlator.get_rrm_for_ue(ue_index)
+    
+    if not correlated_blocks:
+        # Check if any RRM data exists at all
+        corr_stats = l3_rrm_correlator.get_correlation_stats()
+        sessions = _session_directories()[:MAX_SAVED_SESSIONS]
+        if corr_stats['ues_with_rrm'] == 0:
+            error_msg = "No RRM data has been correlated yet. Please upload and analyze logs first."
+        else:
+            correlator = l3_rrm_correlator.get_correlator()
+            available_ues = sorted(list(correlator.ue_rrm_blocks.keys()))[:20]
+            error_msg = f"No RRM blocks found for UE {ue_index}. Available UEs: {', '.join(map(str, available_ues))}"
+            if corr_stats['ues_with_rrm'] > 20:
+                error_msg += f" ... and {corr_stats['ues_with_rrm'] - 20} more"
+        
+        return render_template("upload.html", 
+                             error=error_msg,
+                             previous_sessions=sessions)
+    
+    # Format blocks for display
+    formatted_blocks = []
+    for block_idx, correlation in enumerate(correlated_blocks, 1):
+        l3_trigger_time = correlation.get('l3_trigger_time')
+        rrm_start_time = correlation.get('rrm_start_time')
+        rrm_ue_index = correlation.get('rrm_ue_index')
+        api_id = correlation.get('api_id', 'N/A')
+        is_incomplete = correlation.get('incomplete', False)
+        lines = correlation.get('lines', [])
+        
+        # Calculate time offset
+        time_offset = (rrm_start_time - l3_trigger_time).total_seconds() if (rrm_start_time and l3_trigger_time) else 0
+        
+        ts_str = rrm_start_time.strftime('%d.%m.%Y %H:%M:%S.%f')[:-3] if rrm_start_time else 'N/A'
+        
+        formatted_lines = []
+        for line_dict in lines:
+            formatted_lines.append({
+                'date': line_dict.get('date', ''),
+                'time': line_dict.get('time', ''),
+                'file': line_dict.get('file', ''),
+                'line': line_dict.get('line', ''),
+                'message': line_dict.get('message', '')
+            })
+        
+        formatted_blocks.append({
+            'block_number': block_idx,
+            'timestamp': ts_str,
+            'l3_trigger_time': l3_trigger_time.strftime('%H:%M:%S.%f')[:-3] if l3_trigger_time else 'N/A',
+            'time_offset': f"+{time_offset:.3f}s",
+            'api_id': api_id,
+            'rrm_ue_index': rrm_ue_index,
+            'l3_ue_index': ue_index,
+            'incomplete': is_incomplete,
+            'line_count': len(lines),
+            'lines': formatted_lines
+        })
+    
+    return render_template("rrm_view.html",
+                         ue_index=ue_index,
+                         rrm_blocks=formatted_blocks,
+                         total_blocks=len(formatted_blocks))
 
 
 @app.route("/generate_and_download_txt", methods=["POST"])
@@ -2100,6 +2102,13 @@ def proceed_analysis():
     insights_global[:] = snap.get('insights_global', [])
     valid_indices_global[:] = snap.get('valid_indices_global', [])
     total_ue_indices_global = snap.get('total_ue_indices_global', 0)
+
+    # Restore RRM blocks from snapshot (if using old snapshot format, convert it)
+    rrm_data = snap.get('rrm_journeys', {})
+    if rrm_data:
+        # Update the global RRM blocks map
+        rrm_parser.rrm_ue_blocks_map = rrm_data
+        print(f"✅ Restored RRM data for {len(rrm_data)} UEs from snapshot")
 
     # clear backtrace buffer (we've shown it already)
     bt_df = None
@@ -2244,6 +2253,71 @@ def search_data():
 def ho_mapping():
     ho_map = build_ho_maci_mapping()
     return render_template("ho_mapping.html", ho_map=ho_map)
+
+
+@app.route("/rrm_debug")
+def rrm_debug():
+    """Show RRM correlation debug information."""
+    data_map = _get_ue_data_map()
+    
+    # Get all RRM blocks
+    all_rrm_blocks = rrm_parser.get_all_rrm_journeys()
+    rrm_stats = rrm_parser.get_rrm_stats()
+    
+    # Count L3 UEs
+    l3_ue_count = len(data_map) if data_map else 0
+    
+    # Count RRM blocks
+    rrm_ue_count = rrm_stats['total_ues']
+    rrm_block_count = rrm_stats['total_blocks']
+    
+    # Extract L3 admission timestamps for each UE
+    l3_admission_reqs = {}
+    if data_map:
+        for ue_index, blocks in data_map.items():
+            for block in blocks:
+                timestamp = rrm_parser.extract_l3_admission_timestamp(block)
+                if timestamp:
+                    l3_admission_reqs[ue_index] = timestamp
+                    break
+    
+    l3_admission_count = len(l3_admission_reqs)
+    
+    # Find which UEs have matching RRM blocks
+    correlated_ues = set()
+    for ue_index, l3_timestamp in l3_admission_reqs.items():
+        matching_blocks = rrm_parser.get_rrm_blocks_for_ue_with_timestamp(ue_index, l3_timestamp)
+        if matching_blocks:
+            correlated_ues.add(ue_index)
+    
+    correlated_count = len(correlated_ues)
+    
+    # Find correlation issues
+    correlation_issues = []
+    
+    # Check if RRM files were uploaded but no blocks found
+    if rrm_ue_count == 0:
+        correlation_issues.append("No RRM blocks extracted. Check if RRM_EVENT_X.dbg files were uploaded.")
+    
+    # Check if L3 admission requests exist but no RRM correlation
+    if l3_admission_count > 0 and correlated_count == 0:
+        correlation_issues.append(f"Found {l3_admission_count} L3 admission requests but no RRM correlation. Check time window (3 seconds) and UE index matching.")
+    
+    # Find UEs with L3 admission requests but no RRM correlation
+    missing_rrm = set(l3_admission_reqs.keys()) - correlated_ues
+    if missing_rrm:
+        correlation_issues.append(f"{len(missing_rrm)} UE(s) have L3 admission requests but no RRM correlation: {', '.join(map(str, sorted(missing_rrm)[:10]))}")
+    
+    return render_template("rrm_debug.html",
+                         l3_ue_count=l3_ue_count,
+                         rrm_journey_count=rrm_ue_count,
+                         rrm_block_count=rrm_block_count,
+                         l3_admission_count=l3_admission_count,
+                         correlated_count=correlated_count,
+                         l3_admission_reqs=l3_admission_reqs,
+                         rrm_journeys=all_rrm_blocks,
+                         correlated_ues=correlated_ues,
+                         correlation_issues=correlation_issues)
 
 
 # -----------------------------
@@ -2443,11 +2517,15 @@ def generate_ue_summary(data_map):
         ho_type_info = _extract_ho_type(data_map, ue_index)
         ho_freq_type_info = _extract_ho_freq_type(data_map, ue_index)
 
+        # Check if RRM data is available for this UE
+        has_rrm_data = len(rrm_parser.get_rrm_journey_for_ue(ue_index)) > 0
+
         ue_info = {
             'index': ue_index,
             'is_handover': is_handover,
             'handover_type': handover_type,
             'status': 'success' if is_success else 'incomplete',
+            'has_rrm_data': has_rrm_data,
             'ho_type_value': ho_type_info['ho_type_value'],
             'ho_type_name': ho_type_info['ho_type_name'],
             'ho_freq_type_value': ho_freq_type_info['ho_freq_type_value'],
@@ -2541,25 +2619,184 @@ def ue_journey(ue_index):
     if ue_index not in data_map:
         return render_template("error.html", message=f"UE {ue_index} not found in analysis data."), 404
 
+    from datetime import datetime
+    
+    # Helper function to parse timestamp
+    def parse_ts(date_str, time_str):
+        try:
+            # Try DD.MM.YYYY format first
+            for fmt in ["%d.%m.%Y %H:%M:%S.%f", "%d.%m.%Y %H:%M:%S", 
+                       "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"]:
+                try:
+                    return datetime.strptime(f"{date_str} {time_str}", fmt)
+                except ValueError:
+                    continue
+        except:
+            pass
+        return None
+
+    # L3 Journey - preserve original order, build list with indices
+    l3_lines = []
+    l3_count = 0
+    l3_trigger_pattern = re.compile(
+        r'\[SEND\]\s*\[MODULE:RRC_RRM_MODULE_ID\(2\)\]\s*\[API:[^(]+\((\d+)\)\]',
+        re.IGNORECASE
+    )
+    
     blocks = data_map[ue_index]
-    journey_lines = []
     for block in blocks:
         for row in block:
-            journey_lines.append({
-                'date': str(getattr(row, 'Date', '')),
-                'time': str(getattr(row, 'Time', '')),
+            date_str = str(getattr(row, 'Date', ''))
+            time_str = str(getattr(row, 'Time', ''))
+            message = str(getattr(row, 'Message', ''))
+            ts = parse_ts(date_str, time_str)
+            
+            # Check if this is an L3 trigger line
+            is_trigger = l3_trigger_pattern.search(message) is not None
+            
+            l3_lines.append({
+                'date': date_str,
+                'time': time_str,
                 'file': str(getattr(row, 'File', '')),
                 'line': str(getattr(row, 'Line', '')),
-                'message': str(getattr(row, 'Message', '')),
+                'message': message,
+                'timestamp': ts,
+                'source': 'L3',
+                'is_separator': False,
+                'is_trigger': is_trigger  # Mark L3 trigger lines
             })
+            l3_count += 1
         # Add a separator between blocks
-        journey_lines.append({
+        l3_lines.append({
             'date': '', 'time': '', 'file': '', 'line': '',
-            'message': '***********************************************************************'
+            'message': '***********************************************************************',
+            'timestamp': None,
+            'source': 'L3',
+            'is_separator': True,
+            'is_trigger': False
         })
 
-    return render_template("ue_journey.html", ue_index=ue_index, journey_lines=journey_lines,
-                           total_lines=len(journey_lines))
+    # RRM Journey (if available) - ATOMIC BLOCK INSERTION (NOT timestamp-sorted)
+    rrm_count = 0
+    rrm_debug_info = None
+    
+    # Get correlated RRM blocks for this UE using the new correlator
+    print(f"\n🔍 Fetching correlated RRM blocks for UE {ue_index}...")
+    correlated_rrm_blocks = l3_rrm_correlator.get_rrm_for_ue(ue_index)
+    
+    # Build mapping of L3 trigger timestamps to RRM blocks
+    rrm_blocks_by_trigger_time = {}
+    if correlated_rrm_blocks:
+        print(f"✅ Found {len(correlated_rrm_blocks)} correlated RRM blocks for UE {ue_index}")
+        
+        for block_idx, rrm_correlation in enumerate(correlated_rrm_blocks, 1):
+            l3_trigger_time = rrm_correlation.get('l3_trigger_time')
+            rrm_start_time = rrm_correlation.get('rrm_start_time')
+            rrm_ue_index = rrm_correlation.get('rrm_ue_index')
+            api_id = rrm_correlation.get('api_id', 'N/A')
+            is_incomplete = rrm_correlation.get('incomplete', False)
+            block_lines = rrm_correlation.get('lines', [])
+            
+            # Debug info
+            l3_ts_str = l3_trigger_time.strftime('%H:%M:%S.%f')[:-3] if l3_trigger_time else 'N/A'
+            rrm_ts_str = rrm_start_time.strftime('%H:%M:%S.%f')[:-3] if rrm_start_time else 'N/A'
+            time_diff = (rrm_start_time - l3_trigger_time).total_seconds() if (rrm_start_time and l3_trigger_time) else 0
+            
+            print(f"   Block {block_idx}: L3@{l3_ts_str} -> RRM@{rrm_ts_str} (+{time_diff:.3f}s), "
+                  f"API_ID={api_id}, RRM_UE={rrm_ue_index}, Lines={len(block_lines)}, "
+                  f"Incomplete={is_incomplete}")
+            
+            # Build RRM block structure
+            rrm_block = []
+            
+            # Header
+            header_msg = (f"----------- RRM Block {block_idx} Start -----------\\n"
+                         f"L3 → RRM Request: API_ID={api_id} at {l3_ts_str}\\n"
+                         f"RRM UE Index: {rrm_ue_index}\\n"
+                         f"Time Offset: +{time_diff:.3f}s")
+            if is_incomplete:
+                header_msg += "\\n⚠️ INCOMPLETE (no end marker found)"
+            
+            rrm_block.append({
+                'date': '', 'time': '', 'file': '', 'line': '',
+                'message': header_msg,
+                'timestamp': None,
+                'source': 'RRM',
+                'is_separator': True,
+                'is_trigger': False
+            })
+            
+            # RRM log lines
+            for row in block_lines:
+                date_str = str(row.get('date', ''))
+                time_str = str(row.get('time', ''))
+                ts = parse_ts(date_str, time_str)
+                
+                rrm_block.append({
+                    'date': date_str,
+                    'time': time_str,
+                    'file': str(row.get('file', '')),
+                    'line': str(row.get('line', '')),
+                    'message': str(row.get('message', '')),
+                    'timestamp': ts,
+                    'source': 'RRM',
+                    'is_separator': False,
+                    'is_trigger': False
+                })
+                rrm_count += 1
+            
+            # End separator
+            rrm_block.append({
+                'date': '', 'time': '', 'file': '', 'line': '',
+                'message': '----------- RRM Block End -----------',
+                'timestamp': None,
+                'source': 'RRM',
+                'is_separator': True,
+                'is_trigger': False
+            })
+            
+            # Store by L3 trigger timestamp for insertion
+            if l3_trigger_time:
+                rrm_blocks_by_trigger_time[l3_trigger_time] = rrm_block
+    else:
+        print(f"⚠️ No correlated RRM blocks found for UE {ue_index}")
+        
+        # Check if RRM correlation data exists globally
+        corr_stats = l3_rrm_correlator.get_correlation_stats()
+        if corr_stats['ues_with_rrm'] > 0:
+            # Get sample UEs with RRM data
+            correlator = l3_rrm_correlator.get_correlator()
+            sample_ues = sorted(list(correlator.ue_rrm_blocks.keys()))[:10]
+            rrm_debug_info = f"RRM data available for {corr_stats['ues_with_rrm']} UEs: {', '.join(map(str, sample_ues))}"
+            if corr_stats['ues_with_rrm'] > 10:
+                rrm_debug_info += f" ... and {corr_stats['ues_with_rrm'] - 10} more"
+            rrm_debug_info += f" (Total RRM blocks: {corr_stats['total_rrm_blocks']})"
+        else:
+            rrm_debug_info = "No RRM data loaded. Upload RRM_EVENT_X.dbg files to see RRM logs."
+
+    # ATOMIC BLOCK INSERTION: Insert RRM blocks immediately after L3 triggers
+    # This preserves L3 order and shows RRM blocks contiguously
+    journey_lines = []
+    for l3_line in l3_lines:
+        # Add the L3 line
+        journey_lines.append(l3_line)
+        
+        # If this is a trigger line, check if we have an RRM block for it
+        if l3_line.get('is_trigger') and l3_line.get('timestamp'):
+            trigger_ts = l3_line['timestamp']
+            if trigger_ts in rrm_blocks_by_trigger_time:
+                # Insert entire RRM block immediately after this L3 trigger
+                rrm_block = rrm_blocks_by_trigger_time[trigger_ts]
+                journey_lines.extend(rrm_block)
+                print(f"✅ Inserted RRM block ({len(rrm_block)-2} lines) after L3 trigger at {trigger_ts}")
+
+    return render_template("ue_journey.html", 
+                         ue_index=ue_index, 
+                         journey_lines=journey_lines,
+                         total_l3_lines=l3_count,
+                         total_rrm_lines=rrm_count,
+                         total_lines=l3_count + rrm_count,
+                         rrm_debug_info=rrm_debug_info)
 
 
 # @app.get("/ho_stats/<int:ue>")
@@ -2616,33 +2853,6 @@ def _classify_ue_attachment(data_map, ue_index):
     else:
         return "📡 Source Side UE (Direct Attach)"
 
-
-MILESTONE_PATTERNS = [
-    {"name": "Value of U16 crnti", "type": "RNTI", "occur": 1},
-    {"name": "Value of U8 cell_index", "type": "cell_id", "occur": 1},
-    {"name": "RRC_MSG: RRC CONNECTION REQUEST", "type": "RRC Connection Request", "occur": 0},
-    {"name": "RRC_MSG: RRC CONNECTION SETUP", "type": "RRC Connection Setup", "occur": 0},
-    {"name": "RRC_MSG: RRC CONNECTION SETUP COMPLETE", "type": "RRC Connection Setup Complete", "occur": 0},
-    {"name": "RRC_MSG: SECURITY MODE COMMAND", "type": "Security Mode Command", "occur": 0},
-    {"name": "RRC_MSG: SECURITY MODE COMPLETE", "type": "Security Mode Complete", "occur": 0},
-    #{"name": "RRC_MSG: RRC CONNECTION RECONFIGURATION", "type": "RRC Connection Reconfiguration", "occur": 0},
-    {"name": "X2AP_MSG: HANDOVER REQUEST", "type": "X2AP HO Request", "occur": 0},
-    {"name": "X2AP_MSG: HANDOVER REQUEST ACKNOWLEDGE", "type": "X2AP HO ACK", "occur": 0},
-    {"name": "S1AP_MSG: HANDOVER REQUEST", "type": "S1AP HO Request", "occur": 0},
-    {"name": "RRC_MSG: RRC CONNECTIONREESTABLISHMENT REQUEST", "type": "RRC Reestablishment Request", "occur": 0},
-    {"name": "RRC_MSG: RRC CONNECTION REESTABLISHMENT", "type": "RRC Reestablishment", "occur": 0},
-    {"name": "RRC_MSG: RRC CONNECTION RE-ESTABLISHMENT COMPLETE", "type": "RRC Re-establishment Complete", "occur": 0},
-    {"name": "PATH SWITCH REQUEST", "type": "Path Switch Request", "occur": 0},
-    {"name": "PATH SWITCH REQUEST ACK", "type": "Path Switch Request Ack", "occur": 0},
-    {"name": "Value of U8 is256QAMSupported", "type": "DL 256QAM", "occur": 0},
-    {"name": "TTI BUNDLING is supported by UE", "type": "TTI BUNDLING", "occur": 0},
-   # {"name": "RRC_MSG: RRC CONNECTION RECONFIGURATION COMPLETE", "type": "RRC Connection Reconfiguration Complete", "occur": 0},
-    {"name": "RRC_MSG: UE INFORMATION REQUEST", "type": "UE Information Request", "occur": 0},
-    {"name": "RRC_MSG: UL UE INFORMATION", "type": "UL UE Information", "occur": 0},
-    {"name": "RRC_MSG: MEASUREMENT REPORT", "type": "Measurement Report", "occur": 0},
-    {"name": "X2AP_MSG: UE CONTEXT RELEASE", "type": "UE Context Release", "occur": 0},
-    {"name": "TEID:RCR UE Release timer expiry", "type": "UE Release", "occur": 0}
-]
 
 def extract_ue_milestones(data_map, ue_index):
     """
