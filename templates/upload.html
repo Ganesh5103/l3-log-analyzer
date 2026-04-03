@@ -54,8 +54,14 @@
                 <!-- ANALYZE LOGS (LOCAL) -->
                 <div id="analyze-fields">
                     <label class="form-label">Upload .dbg or .bkp Files (L3_EVENT_X and RRM_EVENT_X)</label>
-                    <input type="file" name="logfiles" class="form-control" multiple accept=".dbg,.bkp">
+                    <input type="file" name="logfiles" id="logfiles-input" class="form-control" multiple accept=".dbg,.bkp">
                     <div class="form-text">Upload both L3 and RRM event files for complete analysis with correlation</div>
+                    <!-- Estimated time shown immediately after file selection -->
+                    <div id="upload-size-estimate" class="d-none mt-2 p-2 rounded" style="background:#e8f4fd; border:1px solid #bee3f8;">
+                      <i class="bi bi-clock text-info"></i>
+                      <span id="upload-size-text" class="small text-secondary"></span>
+                      <span id="upload-timer-text" class="fw-bold text-primary ms-1"></span>
+                    </div>
                 </div>
 
                 <!-- SCP FROM SERVER -->
@@ -98,6 +104,13 @@
                         <i class="bi bi-clock"></i> 
                         <span id="elapsed-time">0s</span> elapsed / 
                         <span id="estimated-time">~0s</span> estimated
+                    </div>
+                    
+                    <!-- Cancel Button -->
+                    <div class="text-center mt-3">
+                        <button class="btn btn-danger" onclick="cancelUpload()">
+                            <i class="bi bi-x-circle"></i> Cancel Upload
+                        </button>
                     </div>
                     
                     <!-- Fun Quotes Section -->
@@ -210,7 +223,7 @@ function startQuoteRotation() {
     if (quotesSection) {
         quotesSection.style.display = 'block';
         showRandomQuote(); // Show first quote immediately
-        quoteInterval = setInterval(showRandomQuote, 10000); // Rotate every 10 seconds
+        quoteInterval = setInterval(showRandomQuote, 20000); // Rotate every 20 seconds
     }
 }
 
@@ -234,6 +247,36 @@ function showFields(active) {
 document.getElementById("analyze").addEventListener("change", () => showFields("analyze"));
 document.getElementById("scp_analyze").addEventListener("change", () => showFields("scp_analyze"));
 document.getElementById("convert").addEventListener("change", () => showFields("convert"));
+
+// ── Instant file-size estimate on file selection ──────────────────────────
+// Rate: 20 MB ≈ 2 min → 0.167 MB/s + 10s overhead
+const PROC_SPEED_MB_S = 0.167;
+const PROC_OVERHEAD_S = 10;
+
+function formatEstimate(seconds) {
+    if (seconds < 60) return `~${Math.round(seconds)}s`;
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return s === 0 ? `~${m} min` : `~${m} min ${s}s`;
+}
+
+document.getElementById('logfiles-input').addEventListener('change', function () {
+    const box   = document.getElementById('upload-size-estimate');
+    const sizeEl = document.getElementById('upload-size-text');
+    const timeEl = document.getElementById('upload-timer-text');
+
+    let totalBytes = 0;
+    for (const file of this.files) totalBytes += file.size;
+
+    if (totalBytes === 0) { box.classList.add('d-none'); return; }
+
+    const totalMB = totalBytes / (1024 * 1024);
+    const estSec  = (totalMB / PROC_SPEED_MB_S) + PROC_OVERHEAD_S;
+
+    sizeEl.textContent = `Total: ${totalMB.toFixed(1)} MB —`;
+    timeEl.textContent = `Estimated processing time: ${formatEstimate(estSec)}`;
+    box.classList.remove('d-none');
+});
 
 // Progress tracking
 let progressInterval = null;
@@ -380,6 +423,28 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+// Cancel upload function
+function cancelUpload() {
+    if (confirm('Are you sure you want to cancel the upload?')) {
+        // Clear interval
+        if (progressInterval) {
+            clearInterval(progressInterval);
+        }
+        stopQuoteRotation();
+        
+        // Call cancel endpoint
+        fetch('/cancel_analysis', { method: 'POST' })
+            .then(() => {
+                // Reload the upload page
+                window.location.reload();
+            })
+            .catch(() => {
+                // Reload anyway
+                window.location.reload();
+            });
+    }
+}
 </script>
 
 </body>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>RRM Logs - UE {{ ue_index }} | Tejas L3 Log Analysis</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <!-- Bootstrap 5 CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  
+  <style>
+    .rrm-block {
+      background-color: #fff9e6;
+      border-left: 4px solid #ff9800;
+      margin-bottom: 2rem;
+    }
+    .rrm-block-header {
+      background-color: #ffe0b2;
+      border-bottom: 2px solid #ff9800;
+    }
+    .log-table {
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+    }
+    .log-table td {
+      padding: 0.3rem 0.5rem;
+      vertical-align: top;
+    }
+    .msg-col {
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg sticky-top navbar-dark">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/">
+        <i class="bi bi-diagram-3-fill"></i> Tejas L3 Log Analyzer
+      </a>
+      <div class="navbar-nav ms-auto">
+        <a class="nav-link" href="{{ url_for('upload_page') }}">
+          <i class="bi bi-arrow-left"></i> Back to Upload
+        </a>
+        <a class="nav-link" href="{{ url_for('show_results') }}">
+          <i class="bi bi-house"></i> Results
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-body">
+            <h3 class="card-title">
+              <i class="bi bi-hdd-network text-warning"></i> RRM Logs for UE Index {{ ue_index }}
+            </h3>
+            <p class="text-muted mb-0">
+              <strong>Total Blocks:</strong> <span class="badge bg-warning text-dark">{{ total_blocks }}</span>
+              <span class="ms-3"><i class="bi bi-info-circle"></i> Each block represents one RRM journey from "Received uecc_ue_index" to "Sending RRC_RRM_UE_ADMISSION_RESP"</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RRM Blocks -->
+    {% for block in rrm_blocks %}
+    <div class="card rrm-block">
+      <div class="card-header rrm-block-header">
+        <div class="row align-items-center">
+          <div class="col-md-8">
+            <h5 class="mb-0">
+              <i class="bi bi-box-seam text-warning"></i> Block #{{ block.block_number }}
+              <span class="badge bg-warning text-dark ms-2">{{ block.line_count }} lines</span>
+            </h5>
+          </div>
+          <div class="col-md-4 text-md-end">
+            <small class="text-muted">
+              <i class="bi bi-clock"></i> {{ block.timestamp }}
+            </small>
+          </div>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover log-table mb-0">
+            <thead class="table-light">
+              <tr>
+                <th style="width:30px">#</th>
+                <th style="width:110px">Date</th>
+                <th style="width:130px">Time</th>
+                <th style="width:180px">File</th>
+                <th style="width:50px">Line</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for line in block.lines %}
+              <tr>
+                <td class="text-muted">{{ loop.index }}</td>
+                <td>{{ line.date }}</td>
+                <td>{{ line.time }}</td>
+                <td>{{ line.file }}</td>
+                <td>{{ line.line }}</td>
+                <td class="msg-col">{{ line.message }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+    {% if not rrm_blocks %}
+    <div class="alert alert-info">
+      <i class="bi bi-info-circle"></i> No RRM blocks found for UE {{ ue_index }}.
+    </div>
+    {% endif %}
+
+    <!-- Back Button -->
+    <div class="text-center my-4">
+      <a href="{{ url_for('upload_page') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Upload Page
+      </a>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

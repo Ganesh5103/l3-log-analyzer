@@ -38,7 +38,7 @@
           </h3>
 
           <!-- Search Counters Section -->
-          <div class="mb-5">
+          <!-- <div class="mb-5">
             <h5 class="fw-bold text-secondary">🔎 Search RRC Counters</h5>
             <p class="small text-muted">Enter an exact RRC message string (case-insensitive) to view its count.</p>
 
@@ -69,7 +69,7 @@
                 {% endif %}
               </div>
             {% endif %}
-          </div>
+          </div> -->
 
           <hr>
 
@@ -98,10 +98,16 @@
                         <div class="card-header bg-light">
                           <div class="d-flex justify-content-between align-items-center">
                             <div>
-                              <strong class="text-primary">UE {{ ue }}</strong>
+                              {% if ue == 'no_ue_index' %}
+                                <strong class="text-warning">No UE Index</strong>
+                                <span class="badge bg-secondary ms-2">System / Unassigned</span>
+                              {% else %}
+                                <strong class="text-primary">UE {{ ue }}</strong>
+                              {% endif %}
                               <span class="badge bg-info ms-2">{{ info.count }} matches</span>
                             </div>
                             <div>
+                              {% if ue != 'no_ue_index' %}
                               <a href="{{ url_for('ue_journey', ue_index=ue) }}" class="btn btn-sm btn-outline-primary me-2">
                                 <i class="bi bi-eye"></i> View Journey
                               </a>
@@ -111,6 +117,7 @@
                                   <i class="bi bi-download"></i> Download
                                 </button>
                               </form>
+                              {% endif %}
                             </div>
                           </div>
                         </div>

@@ -42,6 +42,12 @@
         <span id="estimated-time">~0s</span> estimated
       </div>
       
+      <div class="mt-4">
+        <button id="cancel-btn" class="btn btn-danger" onclick="cancelAnalysis()">
+          <i class="bi bi-x-circle"></i> Cancel Analysis
+        </button>
+      </div>
+      
       <div id="error-message" class="alert alert-danger d-none mt-3"></div>
     </div>
   </div>
@@ -150,7 +156,7 @@ function startQuoteRotation() {
     if (quotesSection) {
         quotesSection.style.display = 'block';
         showRandomQuote(); // Show first quote immediately
-        quoteInterval = setInterval(showRandomQuote, 10000); // Rotate every 10 seconds
+        quoteInterval = setInterval(showRandomQuote, 20000); // Rotate every 20 seconds
     }
 }
 
@@ -163,6 +169,23 @@ function stopQuoteRotation() {
     if (quotesSection) {
         quotesSection.style.display = 'none';
     }
+}
+
+function cancelAnalysis() {
+  if (confirm('Are you sure you want to cancel the analysis?')) {
+    // Clear intervals
+    clearInterval(pollInterval);
+    if (redirectTimer) clearTimeout(redirectTimer);
+    
+    // Call cancel endpoint
+    fetch('/cancel_analysis', { method: 'POST' })
+      .then(() => {
+        window.location.href = '/upload';
+      })
+      .catch(() => {
+        window.location.href = '/upload';
+      });
+  }
 }
 
 // Start polling every 500ms

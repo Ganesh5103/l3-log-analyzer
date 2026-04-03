@@ -390,7 +390,7 @@
     <a class="navbar-brand" href="/"><i class="bi bi-diagram-3-fill"></i> Tejas L3 Log Analyzer</a>
     <div class="d-flex">
       <a href="{{ url_for('search_data') }}" class="btn btn-outline-warning btn-sm me-2"><i class="bi bi-search"></i> Search Data</a>
-      <a href="{{ url_for('rrm_debug') }}" class="btn btn-outline-info btn-sm me-2" title="RRM Correlation Debug Info"><i class="bi bi-hdd-network"></i> RRM Debug</a>
+      <!-- <a href="{{ url_for('rrm_debug') }}" class="btn btn-outline-info btn-sm me-2" title="RRM Correlation Debug Info"><i class="bi bi-hdd-network"></i> RRM Debug</a> -->
       <a href="{{ url_for('show_results') }}" class="btn btn-outline-light btn-sm me-2"><i class="bi bi-arrow-left"></i> Results</a>
       <a href="{{ url_for('upload_page') }}" class="btn btn-outline-light btn-sm"><i class="bi bi-upload"></i> New Upload</a>
     </div>
@@ -574,8 +574,8 @@
             <tr><td>Connection Requests</td><td class="text-end fw-bold">{{ summary.totals.rrc_conn_req }}</td></tr>
             <tr><td>Connection Setups</td><td class="text-end fw-bold">{{ summary.totals.rrc_conn_setup }}</td></tr>
             <tr><td>Setup Completes</td><td class="text-end fw-bold">{{ summary.totals.rrc_conn_setup_complete }}</td></tr>
-            <tr><td>Reconfigurations</td><td class="text-end fw-bold">{{ summary.totals.rrc_reconfig }}</td></tr>
-            <tr><td>Reconfig Completes</td><td class="text-end fw-bold">{{ summary.totals.rrc_reconfig_complete }}</td></tr>
+            <!-- <tr><td>Reconfigurations</td><td class="text-end fw-bold">{{ summary.totals.rrc_reconfig }}</td></tr> -->
+            <!-- <tr><td>Reconfig Completes</td><td class="text-end fw-bold">{{ summary.totals.rrc_reconfig_complete }}</td></tr> -->
           </table>
         </div>
       </div>

@@ -32,9 +32,17 @@
             <a href="{{ url_for('ue_summary') }}" class="btn btn-outline-info btn-sm me-2">
                 <i class="bi bi-clipboard-data"></i> UE Summary
             </a>
-            <a href="{{ url_for('ho_mapping') }}" class="btn btn-outline-light btn-sm">
-                <i class="fa-solid fa-arrows-left-right"></i> HO Results
+            <a href="{{ url_for('ho_mapping') }}" class="btn btn-outline-light btn-sm me-2">
+                <i class="bi bi-arrow-left-right"></i> HO Results
             </a>
+            <a href="{{ url_for('rre_results') }}" class="btn btn-outline-success btn-sm">
+                <i class="bi bi-recycle"></i> RRE Results
+            </a>
+            {% if drx_has_data %}
+            <a href="{{ url_for('drx_status') }}" class="btn btn-outline-primary btn-sm ms-2">
+                <i class="bi bi-battery-charging"></i> DRX_STATUS
+            </a>
+            {% endif %}
         </div>
     </div>
 </nav>

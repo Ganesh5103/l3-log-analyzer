@@ -52,6 +52,70 @@ main {
     font-weight: 600;
 }
 
+/* Navbar buttons styling - colored by function, same before and after hover */
+.navbar .btn-outline-light,
+.navbar .btn-outline-warning,
+.navbar .btn-outline-info,
+.navbar .btn-outline-success,
+.navbar .btn-outline-primary {
+    color: white !important;
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Search Data button - amber */
+.navbar .btn-outline-warning {
+    background-color: #ffc107 !important;
+    color: #1a1a1a !important;
+}
+
+/* Upload button - gray */
+.navbar a[href*="upload_page"].btn-outline-light {
+    background-color: #6c757d !important;
+    color: white !important;
+}
+
+/* UE Summary button - cyan */
+.navbar .btn-outline-info {
+    background-color: #17a2b8 !important;
+    color: white !important;
+}
+
+/* HO Results button - teal */
+.navbar a[href*="ho_mapping"].btn-outline-light {
+    background-color: #20c997 !important;
+    color: white !important;
+}
+
+/* RRE Results button - green */
+.navbar .btn-outline-success {
+    background-color: #28a745 !important;
+    color: white !important;
+}
+
+/* DRX_STATUS button - blue */
+.navbar .btn-outline-primary {
+    background-color: #007bff !important;
+    color: white !important;
+}
+
+/* Back buttons - dark gray */
+.navbar a[href*="show_results"].btn-outline-light,
+.navbar a[href*="ue_summary"].btn-outline-light {
+    background-color: #495057 !important;
+    color: white !important;
+}
+
+/* Other outline-light buttons (default) */
+.navbar .btn-outline-light {
+    background-color: #6c757d !important;
+    color: white !important;
+}
+
+/* Hover state - same colors, just slight opacity change for feedback */
+.navbar .btn:hover {
+    opacity: 0.9 !important;
+}
+
 /* --- Cards with Frosted Glass Effect --- */
 .card {
     border: 1px solid rgba(255, 255, 255, 0.2);

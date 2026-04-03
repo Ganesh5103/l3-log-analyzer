@@ -53,6 +53,18 @@ insights_global = []
 valid_indices_global = []
 total_ue_indices_global = 0
 
+# RRE (RRC Re-Establishment) Mapping Results
+rre_mapping_results = []
+
+# RRE Edge Cases (triggers without UE context)
+rre_edge_cases_global = []
+
+# RRE Edge Case Mappings (edge cases mapped to previous UE)
+rre_edge_case_mappings_global = []
+
+# DRX (Discontinuous Reception) Detection Results
+drx_messages = []
+
 # Snapshot to preserve analysis data when a crash/backtrace is detected
 last_analysis_snapshot = None
 
@@ -72,8 +84,8 @@ analysis_progress = {
 
 # Time estimation constants (based on benchmarking)
 # Processing speed: ~2-3 MB/second on average hardware
-PROCESSING_SPEED_MB_PER_SEC = 2.5  # Conservative estimate
-OVERHEAD_SECONDS = 5  # Base overhead for parsing/indexing
+PROCESSING_SPEED_MB_PER_SEC = 0.167  # Based on observed: 20 MB ≈ 2 min
+OVERHEAD_SECONDS = 10  # Base overhead for RRE/DRX detection after file parsing
 
 # Global backtrace DataFrame used when a crash/backtrace is detected
 bt_df = None
@@ -91,9 +103,9 @@ def _session_directories():
         if os.path.isdir(full_path) and name.startswith("session_"):
             mtime = os.path.getmtime(full_path)
             # Count files matching the same criteria used in analysis:
-            # startswith "l3_event_x" and contains ".dbg" or ".bkp"
+            # startswith "l3_event_x" or "rrm_event_x" and contains ".dbg" or ".bkp"
             file_count = len([f for f in os.listdir(full_path)
-                              if (f.lower().startswith("l3_event_x") and 
+                              if ((f.lower().startswith("l3_event_x") or f.lower().startswith("rrm_event_x")) and 
                                   (".dbg" in f.lower() or ".bkp" in f.lower()))])
             sessions.append({
                 "name": name,
@@ -436,7 +448,10 @@ def generate_insights(data_map):
     if not data_map:
         return insights
 
-    for ue_index, blocks in sorted(data_map.items()):
+    # Filter out non-integer keys (like 'rre_triggered')
+    ue_items = [(k, v) for k, v in data_map.items() if isinstance(k, int)]
+    
+    for ue_index, blocks in sorted(ue_items):
         # Collect all messages for this UE and normalize to uppercase for searching
         messages = [str(row.Message) for block in blocks for row in block]
         nm = " ".join(messages).upper()
@@ -681,8 +696,9 @@ def process_logs_for_ue_journey(filepath):
             if found is not None:
                 ue_line_refs.append((i, found))
 
-        # No UE reference anywhere → skip (system / OAM message)
+        # No UE reference anywhere → store under special key 'no_ue_index'
         if not ue_line_refs:
+            ue_blocks.setdefault('no_ue_index', []).append(list(raw_block))
             continue
 
         # Unique UEs in order of first appearance
@@ -760,7 +776,7 @@ def merge_logs_for_ue_journey(folder):
     total_size_mb = 0
     for filename in sorted(os.listdir(folder)):
         fn_lower = filename.lower()
-        if fn_lower.startswith("l3_event_x") and (".dbg" in fn_lower or ".bkp" in fn_lower):
+        if (fn_lower.startswith("l3_event_x") or fn_lower.startswith("rrm_event_x")) and (".dbg" in fn_lower or ".bkp" in fn_lower):
             files_to_process.append(filename)
             # Calculate file size
             file_path = os.path.join(folder, filename)
@@ -798,7 +814,622 @@ def merge_logs_for_ue_journey(folder):
             print(f"Could not process {filename} for UE journey: {e}")
             analysis_progress['message'] = f'Error processing {filename}: {str(e)}'
     
+    # ✅ EDGE CASE HANDLING: Detect RRE triggers without UE index
+    # This runs AFTER UE journey separation (non-intrusive addition)
+    global rre_edge_cases_global, rre_edge_case_mappings_global
+    try:
+        analysis_progress['message'] = 'Detecting RRE edge cases...'
+        rre_edge_cases = detect_rre_edge_cases(folder)
+        
+        # Map edge cases to previous UE using CRNTI correlation
+        edge_case_mappings = []
+        if rre_edge_cases:
+            analysis_progress['message'] = 'Mapping RRE edge cases to previous UEs...'
+            edge_case_mappings = map_edge_cases_to_previous_ue(rre_edge_cases, combined_map)
+            rre_edge_case_mappings_global = edge_case_mappings
+            print(f"✅ Created {len(edge_case_mappings)} edge case mapping(s)")
+        
+        # Store ONLY unmapped edge cases in global (mapped ones show in Tier 2, unmapped in Tier 3)
+        mapped_rntis = {m['rnti'] for m in edge_case_mappings}
+        unmapped_edge_cases = [ec for ec in rre_edge_cases if ec.get('rnti') not in mapped_rntis]
+        rre_edge_cases_global = unmapped_edge_cases
+        
+        # Add edge cases to combined_map with special key 'rre_triggered'
+        if rre_edge_cases:
+            # Convert edge case dictionaries to block format for consistency
+            edge_case_blocks = []
+            for edge_case in rre_edge_cases:
+                # Create a mock row object for compatibility
+                from collections import namedtuple
+                Row = namedtuple('Row', ['Date', 'Time', 'File', 'Line', 'Message', 'LogLine'])
+                
+                # Store edge case as a single-row block
+                edge_row = Row(
+                    Date=edge_case['date'],
+                    Time=edge_case['time'],
+                    File=edge_case['filename'],
+                    Line='',
+                    Message=f"RRE Trigger: RNTI={edge_case['rnti']}, CRNTI={edge_case['crnti']}, UE Context NOT FOUND",
+                    LogLine=0
+                )
+                edge_case_blocks.append([edge_row])
+            
+            # Add to combined_map with special key
+            combined_map['rre_triggered'] = edge_case_blocks
+            print(f"✅ Added {len(edge_case_blocks)} RRE edge case(s) to combined_map")
+    except Exception as e:
+        print(f"⚠️ Error detecting RRE edge cases: {e}")
+    
     return combined_map, folder_crash
+
+
+def detect_rre_edge_cases(folder):
+    """
+    ✅ EDGE CASE HANDLER: Detect RRE triggers where UE index cannot be found.
+    
+    Scans log files for pattern: [RNTI:<value>] RRC_MSG: RRC CONNECTIONREESTABLISHMENT REQUEST
+    
+    Logic:
+    1. Detect RRE trigger message
+    2. Scan next 10 lines (strict limit) for UE index
+    3. If UE index found → skip (existing RRE logic will handle)
+    4. If UE index NOT found → create 'rre_triggered' entry
+    
+    Returns list of RRE edge case dictionaries with special key 'rre_triggered'.
+    """
+    from datetime import datetime
+    import os
+    
+    rre_edge_cases = []
+    rnti_pattern = re.compile(r'\[RNTI:(\d+)\]\s+RRC_MSG:\s+RRC\s+CONNECTIONREESTABLISHMENT\s+REQUEST', re.IGNORECASE)
+    ue_re = re.compile(
+        r'(?:\bUE:\s*(\d+))|'
+        r'(?:\bUE\s+INDEX\b\s*=\s*(\d+))|'
+        r'(?:\bue_index\b\s*=\s*(\d+))',
+        re.IGNORECASE
+    )
+    MAX_VALID_UE_INDEX = 65535
+    
+    print("\n🔍 Detecting RRE edge cases (triggers without UE index)...")
+    
+    # Get list of log files to scan
+    files_to_scan = []
+    for filename in sorted(os.listdir(folder)):
+        fn_lower = filename.lower()
+        if (fn_lower.startswith("l3_event_x") or fn_lower.startswith("rrm_event_x")) and (".dbg" in fn_lower or ".bkp" in fn_lower):
+            files_to_scan.append(os.path.join(folder, filename))
+    
+    for filepath in files_to_scan:
+        try:
+            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+            
+            for idx, line in enumerate(lines):
+                # Check for RRE trigger pattern
+                rnti_match = rnti_pattern.search(line)
+                if rnti_match:
+                    rnti_value = rnti_match.group(1)
+                    
+                    # Phase 1: Scan next 10 lines for UE index (strict limit per spec)
+                    ue_found = False
+                    lookahead_lines = []
+                    
+                    for offset in range(1, 11):  # Next 10 lines only for UE check
+                        if idx + offset < len(lines):
+                            next_line = lines[idx + offset]
+                            lookahead_lines.append(next_line.strip())
+                            
+                            # Check for UE index in this line
+                            ue_match = ue_re.search(next_line)
+                            if ue_match:
+                                for v in ue_match.groups():
+                                    if v is not None:
+                                        cv = v.lstrip('0') or '0'
+                                        if cv.isdigit():
+                                            uv = int(cv)
+                                            if 0 <= uv <= MAX_VALID_UE_INDEX:
+                                                ue_found = True
+                                                break
+                            if ue_found:
+                                break
+                    
+                    # If NO UE index found in next 10 lines → EDGE CASE
+                    if not ue_found:
+                        # Phase 2: Extend lookahead to 20 lines for CRNTI/PCI/cause extraction
+                        # (CRNTI may appear beyond line 10, e.g. 'Received CRNTI :165')
+                        for offset in range(11, 21):
+                            if idx + offset < len(lines):
+                                lookahead_lines.append(lines[idx + offset].strip())
+
+                        crnti_value = None
+                        pci_value = None
+                        cause_value = None
+                        
+                        for lookahead in lookahead_lines:
+                            # Match: 'Value of U16/U32 crnti/CRNTI = <n>'  OR  'CRNTI :<n>'  OR  'Received CRNTI :<n>'
+                            crnti_match = re.search(r'Value\s+of\s+U\d+\s+CRNTI\s*=\s*(\d+)', lookahead, re.IGNORECASE)
+                            if not crnti_match:
+                                crnti_match = re.search(r'CRNTI\s*:\s*(\d+)', lookahead, re.IGNORECASE)
+                            if crnti_match and crnti_value is None:
+                                crnti_value = int(crnti_match.group(1))
+                            
+                            pci_match = re.search(r'PCI\s*:\s*(\d+)', lookahead, re.IGNORECASE)
+                            if pci_match and pci_value is None:
+                                pci_value = int(pci_match.group(1))
+                            
+                            cause_match = re.search(r'Reest_fail_cause:\s*([^\s,]+)', lookahead, re.IGNORECASE)
+                            if cause_match:
+                                cause_value = cause_match.group(1)
+                        
+                        # Extract timestamp from trigger line
+                        timestamp_match = REGEX_CONVERTED.match(line.strip())
+                        if not timestamp_match:
+                            timestamp_match = REGEX_LEGACY.match(line.strip())
+                        
+                        date_str = timestamp_match.group('date') if timestamp_match else ''
+                        time_str = timestamp_match.group('time') if timestamp_match else ''
+                        
+                        # Decode the cause value to human-readable string
+                        RRE_CAUSE_ENUM = {
+                            0: "reconfigurationFailure",
+                            1: "handoverFailure",
+                            2: "otherFailure",
+                            3: "spare1"
+                        }
+                        decoded_cause = cause_value
+                        if cause_value is not None:
+                            try:
+                                cause_int = int(cause_value)
+                                decoded_cause = RRE_CAUSE_ENUM.get(cause_int, f"unknown({cause_value})")
+                            except (ValueError, TypeError):
+                                decoded_cause = f"unknown({cause_value})"
+                        
+                        # Create edge case entry
+                        edge_case = {
+                            'ue_index': 'rre_triggered',  # Special key
+                            'context': 'not found',
+                            'rnti': int(rnti_value),
+                            'crnti': crnti_value,
+                            'pci': pci_value,
+                            'cause': decoded_cause,  # Decoded cause string
+                            'date': date_str,
+                            'time': time_str,
+                            'timestamp': f"{date_str} {time_str}",
+                            'trigger_line': line.strip(),
+                            'related_lines': lookahead_lines,
+                            'filename': os.path.basename(filepath)
+                        }
+                        
+                        rre_edge_cases.append(edge_case)
+                        print(f"⚠️ RRE Edge Case: RNTI={rnti_value}, UE Context NOT FOUND, CRNTI={crnti_value}")
+                        
+        except Exception as e:
+            print(f"Error scanning {filepath} for RRE edge cases: {e}")
+    
+    print(f"📊 RRE Edge Case Detection: Found {len(rre_edge_cases)} trigger(s) without UE context")
+    return rre_edge_cases
+
+
+def map_edge_cases_to_previous_ue(edge_cases, combined_map):
+    """
+    Map RRE edge cases (triggers without UE context) to their previous UE using CRNTI correlation.
+    
+    Logic:
+    1. For each edge case with CRNTI value
+    2. Search all UEs in combined_map for matching CRNTI
+    3. Create mapping: "RRE Triggered (UE Context Not Found)" -> Previous UE <index>
+    4. Decode failure cause to human-readable string
+    
+    Returns list of edge case mapping dictionaries.
+    """
+    from datetime import datetime, timedelta
+    
+    # RRE Failure Cause ENUM Mapping
+    RRE_CAUSE_ENUM = {
+        0: "reconfigurationFailure",
+        1: "handoverFailure",
+        2: "otherFailure",
+        3: "spare1"
+    }
+    
+    def decode_rre_cause(cause_str):
+        """Decode RRE failure cause to human-readable string"""
+        if cause_str is None:
+            return "Unknown"
+        try:
+            cause_int = int(cause_str)
+            return RRE_CAUSE_ENUM.get(cause_int, f"unknown({cause_str})")
+        except (ValueError, TypeError):
+            return f"unknown({cause_str})"
+    
+    def parse_timestamp(date_str, time_str):
+        """Parse timestamp from date and time strings"""
+        try:
+            for fmt in ["%d.%m.%Y %H:%M:%S.%f", "%d.%m.%Y %H:%M:%S", 
+                       "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"]:
+                try:
+                    return datetime.strptime(f"{date_str} {time_str}", fmt)
+                except ValueError:
+                    continue
+        except:
+            pass
+        return None
+    
+    edge_case_mappings = []
+    
+    print("\n🔍 Mapping RRE edge cases to previous UEs via CRNTI correlation...")
+    
+    for edge_case in edge_cases:
+        crnti = edge_case.get('crnti')
+        if not crnti:
+            print(f"⚠️ Edge case without CRNTI, skipping correlation")
+            continue
+        
+        # Parse edge case timestamp
+        edge_timestamp = parse_timestamp(edge_case['date'], edge_case['time'])
+        if not edge_timestamp:
+            print(f"⚠️ Edge case with invalid timestamp, skipping correlation")
+            continue
+        
+        # Search window: 30 seconds before RRE trigger
+        search_start = edge_timestamp - timedelta(seconds=30)
+        
+        print(f"\n🔎 Searching for previous UE with CRNTI={crnti} between {search_start} and {edge_timestamp}...")
+        
+        # ── Exhaustive CRNTI search across ALL UE journeys ──────────────────────
+        # Per spec: CRNTI match is authoritative; only mark 'context not found'
+        # if truly no UE in the session has this CRNTI.
+        # Strategy: prefer a time-windowed match (30 s), then fall back to full scan.
+        found_previous = False
+        ue_indices = sorted([k for k in combined_map.keys() if isinstance(k, int)])
+
+        def _search_ue_for_crnti(ue_index, blocks, crnti_val, ts_start=None, ts_end=None):
+            """Return (match_timestamp_str, row_timestamp) or (None, None)."""
+            for block in blocks:
+                for row in block:
+                    message = str(getattr(row, 'Message', ''))
+                    date_s = str(getattr(row, 'Date', ''))
+                    time_s = str(getattr(row, 'Time', ''))
+                    row_ts = parse_timestamp(date_s, time_s)
+                    if ts_start is not None and ts_end is not None:
+                        if row_ts is None or not (ts_start <= row_ts <= ts_end):
+                            continue
+                    # Match: 'Value of U16/U32 crnti/CRNTI = <n>'  OR  'CRNTI :<n>'
+                    cm = re.search(r'Value\s+of\s+U\d+\s+CRNTI\s*=\s*(\d+)', message, re.IGNORECASE)
+                    if not cm:
+                        cm = re.search(r'CRNTI\s*:\s*(\d+)', message, re.IGNORECASE)
+                    if cm and int(cm.group(1)) == crnti_val:
+                        ts_str = row_ts.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] if row_ts else ''
+                        return ts_str, row_ts
+            return None, None
+
+        match_ts_str = None
+        matched_ue = None
+
+        # Pass 1: 30-second window
+        for ue_index in ue_indices:
+            ts_str, _ = _search_ue_for_crnti(
+                ue_index, combined_map[ue_index], crnti,
+                ts_start=search_start, ts_end=edge_timestamp
+            )
+            if ts_str is not None:
+                match_ts_str = ts_str
+                matched_ue = ue_index
+                break
+
+        # Pass 2: full session exhaustive search (no time restriction)
+        if matched_ue is None:
+            print(f"  ↳ No match in 30-s window; performing full-session exhaustive search...")
+            for ue_index in ue_indices:
+                ts_str, _ = _search_ue_for_crnti(
+                    ue_index, combined_map[ue_index], crnti
+                )
+                if ts_str is not None:
+                    match_ts_str = ts_str
+                    matched_ue = ue_index
+                    print(f"  ✅ Found via exhaustive search: UE {ue_index}")
+                    break
+
+        if matched_ue is not None:
+            cause_decoded = decode_rre_cause(edge_case.get('cause'))
+            mapping_entry = {
+                'current_ue_index': 'UE Context Not Found',
+                'previous_ue_index': matched_ue,
+                'crnti': crnti,
+                'pci': edge_case.get('pci'),
+                'cause': cause_decoded,
+                'match_timestamp': match_ts_str,
+                'rnti': edge_case.get('rnti'),
+                'is_edge_case': True
+            }
+            edge_case_mappings.append(mapping_entry)
+            print(f"✅ Edge Case Mapping: RRE Triggered (No UE Context) → Previous UE {matched_ue} (CRNTI={crnti}) at {match_ts_str}")
+            found_previous = True
+
+        if not found_previous:
+            print(f"⚠️ No previous UE found for CRNTI={crnti} after exhaustive search")
+    
+    print(f"\n📊 Edge Case Mapping Summary: Found {len(edge_case_mappings)} mapping(s)")
+    return edge_case_mappings
+
+
+def detect_rre_mappings(combined_map):
+    """
+    Detect RRC Re-Establishment (RRE) events and map current UE to previous UE using CRNTI correlation.
+    
+    Logic:
+    1. Scan all UEs for "RRC CONNECTIONREESTABLISHMENT REQUEST" message
+    2. Extract CRNTI, PCI, timestamp, and cause from the line immediately following
+    3. Decode RRE failure cause using ENUM mapping
+    4. Search 30 seconds backward across all UEs for the same CRNTI
+    5. Create mapping entry: current_ue -> previous_ue
+    
+    Returns list of RRE mapping dictionaries.
+    """
+    from datetime import datetime, timedelta
+    
+    # RRE Failure Cause ENUM Mapping
+    RRE_CAUSE_ENUM = {
+        0: "reconfigurationFailure",
+        1: "handoverFailure",
+        2: "otherFailure",
+        3: "spare1"
+    }
+    
+    rre_mappings = []
+    
+    # Helper to parse timestamp
+    def parse_timestamp(date_str, time_str):
+        try:
+            # Try DD.MM.YYYY format first
+            for fmt in ["%d.%m.%Y %H:%M:%S.%f", "%d.%m.%Y %H:%M:%S", 
+                       "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"]:
+                try:
+                    return datetime.strptime(f"{date_str} {time_str}", fmt)
+                except ValueError:
+                    continue
+        except:
+            pass
+        return None
+    
+    # Helper to decode RRE failure cause
+    def decode_rre_cause(cause_str):
+        try:
+            cause_int = int(cause_str)
+            return RRE_CAUSE_ENUM.get(cause_int, f"unknown({cause_str})")
+        except (ValueError, TypeError):
+            return f"unknown({cause_str})"
+    
+    # Phase 1: Find all RRE trigger events
+    rre_triggers = []
+    
+    # Filter out non-integer keys (e.g., 'rre_triggered' edge case key)
+    ue_indices = [k for k in combined_map.keys() if isinstance(k, int)]
+    
+    for ue_index in sorted(ue_indices):
+        blocks = combined_map[ue_index]
+        
+        for block_idx, block in enumerate(blocks):
+            for row_idx, row in enumerate(block):
+                message = str(getattr(row, 'Message', ''))
+                
+                # Check for RRE trigger message: RRC_MSG: RRC CONNECTIONREESTABLISHMENT REQUEST
+                if 'RRC_MSG: RRC CONNECTIONREESTABLISHMENT REQUEST' in message:
+                    # Extract timestamp
+                    date_str = str(getattr(row, 'Date', ''))
+                    time_str = str(getattr(row, 'Time', ''))
+                    trigger_timestamp = parse_timestamp(date_str, time_str)
+                    
+                    if trigger_timestamp is None:
+                        continue
+                    
+                    # Look in the next up-to-5 rows of the same block for CRNTI/PCI/cause info
+                    # (safer than assuming it is always the very next row)
+                    crnti = pci = cause_raw = None
+                    for lookahead_offset in range(1, 6):
+                        if row_idx + lookahead_offset >= len(block):
+                            break
+                        lookahead_row = block[row_idx + lookahead_offset]
+                        lmsg = str(getattr(lookahead_row, 'Message', ''))
+                        if crnti is None:
+                            cm = re.search(r'Value\s+of\s+U\d+\s+CRNTI\s*=\s*(\d+)', lmsg, re.IGNORECASE)
+                            if not cm:
+                                cm = re.search(r'CRNTI\s*:\s*(\d+)', lmsg, re.IGNORECASE)
+                            if cm:
+                                crnti = int(cm.group(1))
+                        if pci is None:
+                            pm = re.search(r'PCI\s*:\s*(\d+)', lmsg, re.IGNORECASE)
+                            if pm:
+                                pci = int(pm.group(1))
+                        if cause_raw is None:
+                            caus_m = re.search(r'Reest_fail_cause:\s*([^\s,]+)', lmsg, re.IGNORECASE)
+                            if caus_m:
+                                cause_raw = caus_m.group(1)
+                        if crnti is not None and pci is not None and cause_raw is not None:
+                            break
+
+                    if crnti is not None:
+                        cause_decoded = decode_rre_cause(cause_raw if cause_raw else 'Unknown')
+                        rre_triggers.append({
+                            'current_ue_index': ue_index,
+                            'crnti': crnti,
+                            'pci': pci,
+                            'timestamp': trigger_timestamp,
+                            'cause': cause_decoded
+                        })
+                        print(f"🔍 RRE Trigger found: UE={ue_index}, CRNTI={crnti}, PCI={pci}, Time={trigger_timestamp}, Cause={cause_decoded}")
+    
+    # Phase 2: For each RRE trigger, search for original UE with same CRNTI in 30-second window
+    for trigger in rre_triggers:
+        current_ue = trigger['current_ue_index']
+        crnti = trigger['crnti']
+        rre_time = trigger['timestamp']
+        search_start = rre_time - timedelta(seconds=30)
+        
+        print(f"\n🔎 Searching for original UE with CRNTI={crnti} between {search_start} and {rre_time}...")
+        
+        # ── Exhaustive CRNTI search across ALL UE journeys (per spec) ───────────
+        # Strategy: prefer 30-second time-windowed match, then fall back to full scan.
+        found_original = False
+        search_ue_indices = sorted(
+            [k for k in combined_map.keys() if isinstance(k, int) and k != current_ue]
+        )
+
+        def _find_prev_ue(ue_list, ts_start=None, ts_end=None):
+            for ue_index in ue_list:
+                for block in combined_map[ue_index]:
+                    for row in block:
+                        message = str(getattr(row, 'Message', ''))
+                        date_s = str(getattr(row, 'Date', ''))
+                        time_s = str(getattr(row, 'Time', ''))
+                        row_ts = parse_timestamp(date_s, time_s)
+                        if ts_start is not None and ts_end is not None:
+                            if row_ts is None or not (ts_start <= row_ts <= ts_end):
+                                continue
+                        # Match: 'Value of U16/U32 crnti/CRNTI = <n>'  OR  'CRNTI :<n>'
+                        cm = re.search(r'Value\s+of\s+U\d+\s+CRNTI\s*=\s*(\d+)', message, re.IGNORECASE)
+                        if not cm:
+                            cm = re.search(r'CRNTI\s*:\s*(\d+)', message, re.IGNORECASE)
+                        if cm and int(cm.group(1)) == crnti:
+                            ts_str = row_ts.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] if row_ts else ''
+                            return ue_index, ts_str
+            return None, None
+
+        # Pass 1: 30-second window
+        prev_ue, match_ts = _find_prev_ue(search_ue_indices, ts_start=search_start, ts_end=rre_time)
+
+        # Pass 2: full session exhaustive search
+        if prev_ue is None:
+            print(f"  ↳ No match in 30-s window; performing full-session exhaustive search...")
+            prev_ue, match_ts = _find_prev_ue(search_ue_indices)
+            if prev_ue is not None:
+                print(f"  ✅ Found via exhaustive search: UE {prev_ue}")
+
+        if prev_ue is not None:
+            rre_mappings.append({
+                'current_ue_index': current_ue,
+                'previous_ue_index': prev_ue,
+                'crnti': crnti,
+                'pci': trigger['pci'],
+                'cause': trigger['cause'],
+                'match_timestamp': match_ts
+            })
+            print(f"✅ RRE Mapping: Current UE {current_ue} → Previous UE {prev_ue} (CRNTI={crnti}) at {match_ts}")
+            found_original = True
+        else:
+            print(f"⚠️ No previous UE found for CRNTI={crnti} after exhaustive search")
+    
+    print(f"\n📊 RRE Detection Summary: Found {len(rre_mappings)} RRE mapping(s)")
+    return rre_mappings
+
+
+def detect_drx_messages_from_rrm(rrm_folder):
+    """
+    Detect DRX messages from RRM log files.
+    
+    Scans RRM logs for pattern: DRX:UE[<ue_index>]
+    Extracts:
+    - UE index
+    - Full message text
+    - Timestamp (date and time)
+    
+    Returns list of DRX message dictionaries:
+    [
+        {
+            'ue_index': int,
+            'message': str,
+            'timestamp': str,
+            'date': str,
+            'time': str,
+            'file': str,
+            'line': str
+        },
+        ...
+    ]
+    """
+    from datetime import datetime
+    
+    drx_pattern = re.compile(r'DRX:UE\[(\d+)\]', re.IGNORECASE)
+    drx_results = []
+    
+    print("\n🔍 Detecting DRX messages from RRM logs...")
+    
+    if not os.path.isdir(rrm_folder):
+        print(f"⚠️ RRM folder not found: {rrm_folder}")
+        return []
+    
+    # Find all RRM files
+    rrm_files = []
+    for filename in sorted(os.listdir(rrm_folder)):
+        fname_lower = filename.lower()
+        if fname_lower.startswith('rrm_event_x') and '.dbg' in fname_lower:
+            filepath = os.path.join(rrm_folder, filename)
+            if os.path.isfile(filepath):
+                rrm_files.append(filepath)
+    
+    if not rrm_files:
+        print(f"⚠️ No RRM log files found in {rrm_folder}")
+        return []
+    
+    print(f"📂 Scanning {len(rrm_files)} RRM file(s) for DRX messages...")
+    
+    # Parse each RRM file
+    for filepath in rrm_files:
+        try:
+            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                for line_num, line in enumerate(f, 1):
+                    line_stripped = line.strip()
+                    if not line_stripped:
+                        continue
+                    
+                    # Check for DRX pattern
+                    match = drx_pattern.search(line_stripped)
+                    if match:
+                        ue_index = int(match.group(1))
+                        
+                        # Parse the line using RRM regex to extract structured fields
+                        from rrm_parser import REGEX_RRM
+                        rrm_match = REGEX_RRM.match(line_stripped)
+                        
+                        if rrm_match:
+                            date = rrm_match.group("date")
+                            time_val = rrm_match.group("time")
+                            file = rrm_match.group("file")
+                            line_no = rrm_match.group("line")
+                            message = rrm_match.group("message")
+                            
+                            drx_results.append({
+                                'ue_index': ue_index,
+                                'message': message,
+                                'timestamp': f"{date} {time_val}",
+                                'date': date,
+                                'time': time_val,
+                                'file': file,
+                                'line': line_no
+                            })
+                        else:
+                            # Fallback if RRM regex doesn't match (shouldn't happen)
+                            drx_results.append({
+                                'ue_index': ue_index,
+                                'message': line_stripped,
+                                'timestamp': 'N/A',
+                                'date': 'N/A',
+                                'time': 'N/A',
+                                'file': 'N/A',
+                                'line': 'N/A'
+                            })
+        except Exception as e:
+            print(f"Error scanning RRM file {filepath} for DRX: {e}")
+            continue
+    
+    print(f"✅ Found {len(drx_results)} DRX message(s) across {len(set(d['ue_index'] for d in drx_results))} UE(s)")
+    
+    if drx_results:
+        # Show first few examples
+        for drx_msg in drx_results[:3]:
+            print(f"   - UE {drx_msg['ue_index']}: {drx_msg['message'][:80]}...")
+    
+    return drx_results
 
 
 def count_rrc_messages(folder):
@@ -1049,7 +1680,7 @@ def _scp_download_and_analyze_worker(username, hostname, remote_dir, password, s
     Background worker for SCP download + analysis so UI can poll /progress live.
     """
     global ue_data_map, rrc_counts, insights_global, valid_indices_global, total_ue_indices_global
-    global last_analysis_snapshot, bt_df, crash, analysis_progress, latest_bt_text
+    global last_analysis_snapshot, bt_df, crash, analysis_progress, latest_bt_text, rre_mapping_results, drx_messages
 
     downloaded = []
     ssh = None
@@ -1150,14 +1781,54 @@ def _scp_download_and_analyze_worker(username, hostname, remote_dir, password, s
         analysis_progress['message'] = 'Parsing cell setup status...'
         cell_setup_local = parse_cell_setup_status(session_folder)
 
+        # RRE (RRC Re-Establishment) detection and mapping
+        analysis_progress['message'] = 'Detecting RRE events...'
+        try:
+            print("\n" + "="*80)
+            print("STARTING RRE DETECTION AND MAPPING")
+            print("="*80)
+            rre_results = detect_rre_mappings(combined_map)
+            rre_mapping_results.clear()
+            rre_mapping_results.extend(rre_results)
+            print(f"✅ RRE detection complete: Found {len(rre_results)} RRE mapping(s)")
+            print("="*80 + "\n")
+        except Exception as e:
+            print(f"⚠️ RRE detection failed: {e}")
+            import traceback
+            traceback.print_exc()
+            # Continue without RRE data - not critical
+            pass
+
+        # DRX (Discontinuous Reception) message detection
+        analysis_progress['message'] = 'Detecting DRX messages...'
+        try:
+            print("\n" + "="*80)
+            print("STARTING DRX MESSAGE DETECTION")
+            print("="*80)
+            drx_results = detect_drx_messages_from_rrm(session_folder)
+            drx_messages.clear()
+            drx_messages.extend(drx_results)
+            print(f"✅ DRX detection complete: Found {len(drx_results)} DRX message(s)")
+            print("="*80 + "\n")
+        except Exception as e:
+            print(f"⚠️ DRX detection failed: {e}")
+            import traceback
+            traceback.print_exc()
+            # Continue without DRX data - not critical
+            pass
+
         last_analysis_snapshot = {
             'ue_data_map': combined_map.copy(),
             'rrc_counts': rrc_counts.copy(),
             'rrc_drop_rates': rrc_drop_rates_local,
             'insights_global': generate_insights(combined_map),
-            'valid_indices_global': sorted(combined_map.keys()),
-            'total_ue_indices_global': len(combined_map),
+            'valid_indices_global': sorted([k for k in combined_map.keys() if isinstance(k, int)]),
+            'total_ue_indices_global': len([k for k in combined_map.keys() if isinstance(k, int)]),
             'cell_setup_status': cell_setup_local,
+            'rre_mapping_results': rre_mapping_results.copy(),  # Add RRE mappings to snapshot
+            'rre_edge_cases_global': rre_edge_cases_global.copy() if rre_edge_cases_global else [],  # Add RRE edge cases to snapshot
+            'rre_edge_case_mappings_global': rre_edge_case_mappings_global.copy() if rre_edge_case_mappings_global else [],  # Add RRE edge case mappings to snapshot
+            'drx_messages': drx_messages.copy(),  # Add DRX messages to snapshot
         }
 
         if folder_crash and bt_df is not None:
@@ -1325,16 +1996,56 @@ def analyze_logs(folder):
             # Continue without RRM data - not critical
             pass
 
+        # RRE (RRC Re-Establishment) detection and mapping
+        analysis_progress['message'] = 'Detecting RRE events...'
+        try:
+            print("\n" + "="*80)
+            print("STARTING RRE DETECTION AND MAPPING")
+            print("="*80)
+            rre_results = detect_rre_mappings(combined_map)
+            rre_mapping_results.clear()
+            rre_mapping_results.extend(rre_results)
+            print(f"✅ RRE detection complete: Found {len(rre_results)} RRE mapping(s)")
+            print("="*80 + "\n")
+        except Exception as e:
+            print(f"⚠️ RRE detection failed: {e}")
+            import traceback
+            traceback.print_exc()
+            # Continue without RRE data - not critical
+            pass
+
+        # DRX (Discontinuous Reception) message detection
+        analysis_progress['message'] = 'Detecting DRX messages...'
+        try:
+            print("\n" + "="*80)
+            print("STARTING DRX MESSAGE DETECTION")
+            print("="*80)
+            drx_results = detect_drx_messages_from_rrm(session_folder)
+            drx_messages.clear()
+            drx_messages.extend(drx_results)
+            print(f"✅ DRX detection complete: Found {len(drx_results)} DRX message(s)")
+            print("="*80 + "\n")
+        except Exception as e:
+            print(f"⚠️ DRX detection failed: {e}")
+            import traceback
+            traceback.print_exc()
+            # Continue without DRX data - not critical
+            pass
+
         # Save snapshot (always) so proceed works even if no crash
         last_analysis_snapshot = {
             'ue_data_map': combined_map.copy(),
             'rrc_counts': rrc_counts.copy(),
             'rrc_drop_rates': rrc_drop_rates_local,
             'insights_global': generate_insights(combined_map),
-            'valid_indices_global': sorted(combined_map.keys()),
-            'total_ue_indices_global': len(combined_map),
+            'valid_indices_global': sorted([k for k in combined_map.keys() if isinstance(k, int)]),
+            'total_ue_indices_global': len([k for k in combined_map.keys() if isinstance(k, int)]),
             'cell_setup_status': cell_setup_local,
             'rrm_journeys': l3_rrm_correlator.get_correlator().ue_rrm_blocks,  # Add RRM blocks to snapshot
+            'rre_mapping_results': rre_mapping_results.copy(),  # Add RRE mappings to snapshot
+            'rre_edge_cases_global': rre_edge_cases_global.copy() if rre_edge_cases_global else [],  # Add RRE edge cases to snapshot
+            'rre_edge_case_mappings_global': rre_edge_case_mappings_global.copy() if rre_edge_case_mappings_global else [],  # Add RRE edge case mappings to snapshot
+            'drx_messages': drx_messages.copy(),  # Add DRX messages to snapshot
         }
 
         # Cleanup temp files
@@ -1540,14 +2251,54 @@ def upload_page():
                 analysis_progress['message'] = 'Parsing cell setup status...'
                 cell_setup_local = parse_cell_setup_status(session_folder)
 
+                # RRE (RRC Re-Establishment) detection and mapping
+                analysis_progress['message'] = 'Detecting RRE events...'
+                try:
+                    print("\n" + "="*80)
+                    print("STARTING RRE DETECTION AND MAPPING")
+                    print("="*80)
+                    rre_results = detect_rre_mappings(combined_map)
+                    rre_mapping_results.clear()
+                    rre_mapping_results.extend(rre_results)
+                    print(f"✅ RRE detection complete: Found {len(rre_results)} RRE mapping(s)")
+                    print("="*80 + "\n")
+                except Exception as e:
+                    print(f"⚠️ RRE detection failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Continue without RRE data - not critical
+                    pass
+
+                # DRX (Discontinuous Reception) message detection
+                analysis_progress['message'] = 'Detecting DRX messages...'
+                try:
+                    print("\n" + "="*80)
+                    print("STARTING DRX MESSAGE DETECTION")
+                    print("="*80)
+                    drx_results = detect_drx_messages_from_rrm(session_folder)
+                    drx_messages.clear()
+                    drx_messages.extend(drx_results)
+                    print(f"✅ DRX detection complete: Found {len(drx_results)} DRX message(s)")
+                    print("="*80 + "\n")
+                except Exception as e:
+                    print(f"⚠️ DRX detection failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Continue without DRX data - not critical
+                    pass
+
                 last_analysis_snapshot = {
                      'ue_data_map': combined_map.copy(),
                      'rrc_counts': rrc_counts.copy(),
                     'rrc_drop_rates': rrc_drop_rates_local,
                      'insights_global': generate_insights(combined_map),
-                     'valid_indices_global': sorted(combined_map.keys()),
-                     'total_ue_indices_global': len(combined_map),
+                     'valid_indices_global': sorted([k for k in combined_map.keys() if isinstance(k, int)]),
+                     'total_ue_indices_global': len([k for k in combined_map.keys() if isinstance(k, int)]),
                      'cell_setup_status': cell_setup_local,
+                     'rre_mapping_results': rre_mapping_results.copy(),  # Add RRE mappings to snapshot
+                     'rre_edge_cases_global': rre_edge_cases_global.copy() if rre_edge_cases_global else [],  # Add RRE edge cases to snapshot
+                     'rre_edge_case_mappings_global': rre_edge_case_mappings_global.copy() if rre_edge_case_mappings_global else [],  # Add RRE edge case mappings to snapshot
+                     'drx_messages': drx_messages.copy(),  # Add DRX messages to snapshot
                  }
 
                 if folder_crash and bt_df is not None:
@@ -1746,6 +2497,41 @@ def progress_page():
     return render_template('progress.html')
 
 
+@app.route('/cancel_analysis', methods=['POST'])
+def cancel_analysis():
+    """Cancel ongoing analysis and reset state"""
+    global analysis_progress, ue_data_map, rrc_counts, insights_global, valid_indices_global
+    global last_analysis_snapshot, bt_df, crash, drx_messages, rre_mapping_results, rre_edge_cases_global, rre_edge_case_mappings_global
+    
+    # Reset analysis progress
+    analysis_progress.update({
+        'active': False,
+        'current': 0,
+        'total': 0,
+        'message': 'Cancelled by user',
+        'completed': False,
+        'error': 'Analysis cancelled by user',
+        'estimated_time': 0,
+        'start_time': None,
+        'elapsed_time': 0
+    })
+    
+    # Clear all data
+    ue_data_map.clear()
+    rrc_counts.clear()
+    insights_global.clear()
+    valid_indices_global.clear()
+    rre_mapping_results.clear()
+    rre_edge_cases_global.clear()
+    rre_edge_case_mappings_global.clear()
+    drx_messages.clear()
+    last_analysis_snapshot = None
+    bt_df = None
+    crash = False
+    
+    return jsonify({'status': 'cancelled'})
+
+
 @app.route('/bt_progress')
 def bt_progress():
     global latest_bt_text
@@ -1756,12 +2542,19 @@ def bt_progress():
 
 @app.route("/results")
 def show_results():
-    global last_analysis_snapshot
+    global last_analysis_snapshot, drx_messages
     # prefer live computed rates, else use snapshot-stored rates
     if rrc_counts:
         rrc_drop_rates = compute_drop_rates(rrc_counts)
     else:
         rrc_drop_rates = last_analysis_snapshot.get('rrc_drop_rates', {}) if last_analysis_snapshot else {}
+    
+    # Check if DRX messages exist (from live data or snapshot)
+    drx_data_available = (
+        len(drx_messages) > 0 or 
+        (last_analysis_snapshot and len(last_analysis_snapshot.get('drx_messages', [])) > 0)
+    )
+    
     # If live globals are empty but we have a snapshot (from crash flow), render snapshot results
     if not ue_data_map and last_analysis_snapshot:
         return render_template("index.html",
@@ -1769,13 +2562,15 @@ def show_results():
                                rrc_counts=last_analysis_snapshot.get('rrc_counts', {}),
                                rrc_drop_rates=last_analysis_snapshot.get('rrc_drop_rates', {}),
                                valid_indices=last_analysis_snapshot.get('valid_indices_global', []),
-                               total_ue_indices=last_analysis_snapshot.get('total_ue_indices_global', 0))
+                               total_ue_indices=last_analysis_snapshot.get('total_ue_indices_global', 0),
+                               drx_has_data=drx_data_available)
     return render_template("index.html",
                            detailed_insights=insights_global,
                            rrc_counts=rrc_counts,
                            rrc_drop_rates=rrc_drop_rates,
                            valid_indices=valid_indices_global,
-                           total_ue_indices=total_ue_indices_global)
+                           total_ue_indices=total_ue_indices_global,
+                           drx_has_data=drx_data_available)
 
 
 
@@ -1792,7 +2587,7 @@ def ue_stats():
 
     selected = None
     error = None
-    valid_indices = sorted(data_map.keys())
+    valid_indices = sorted([k for k in data_map.keys() if isinstance(k, int)])
 
     # FINAL OUTPUTS
     diagram_lines = []
@@ -1918,7 +2713,7 @@ def milestones():
     ho_type_info = None
     ho_freq_type_info = None
     is_handover = False
-    valid_indices = sorted(data_map.keys())
+    valid_indices = sorted([k for k in data_map.keys() if isinstance(k, int)])
 
     if request.method == "POST":
         ue_index_val = request.form.get("ue_index", "").strip()
@@ -1955,6 +2750,8 @@ def clear_results():
     rrc_counts.clear()
     insights_global.clear()
     valid_indices_global.clear()
+    rre_mapping_results.clear()
+    drx_messages.clear()
     rrm_parser.clear_rrm_journeys()
     l3_rrm_correlator.clear_correlation()  # Clear new correlation data
     global last_analysis_snapshot
@@ -2073,7 +2870,10 @@ def summary():
         rrc_source = rrc_counts if rrc_counts else (last_analysis_snapshot['rrc_counts'] if last_analysis_snapshot else {})
         counts_content = "".join([f"{msg}: {count}\n" for msg, count in rrc_source.items()])
         zip_file.writestr(f"{folder_name}/rrc_messages_counts.txt", counts_content)
+        # Filter out non-integer keys (e.g., 'rre_triggered')
         for ue_index, blocks in data_map.items():
+            if not isinstance(ue_index, int):
+                continue
             ue_content = ""
             for block in blocks:
                 ue_content += "--------------------------------------------------------\n"
@@ -2154,8 +2954,10 @@ def rrc_counters():
         grep_lower = grep.lower()
         # pick UE data map from live or snapshot
         data_map = ue_data_map if ue_data_map else (last_analysis_snapshot['ue_data_map'] if last_analysis_snapshot else {})
-        # iterate UEs and their blocks/rows
+        # iterate UEs and their blocks/rows (allow integer keys and 'no_ue_index')
         for ue_index, blocks in data_map.items():
+            if not isinstance(ue_index, int) and ue_index != 'no_ue_index':
+                continue
             match_count = 0
             samples = []
             for block in blocks:
@@ -2219,8 +3021,10 @@ def search_data():
         grep_lower = grep.lower()
         # pick UE data map from live or snapshot
         data_map = ue_data_map if ue_data_map else (last_analysis_snapshot['ue_data_map'] if last_analysis_snapshot else {})
-        # iterate UEs and their blocks/rows
+        # iterate UEs and their blocks/rows (allow integer keys and 'no_ue_index')
         for ue_index, blocks in data_map.items():
+            if not isinstance(ue_index, int) and ue_index != 'no_ue_index':
+                continue
             match_count = 0
             samples = []
             for block in blocks:
@@ -2255,6 +3059,64 @@ def ho_mapping():
     return render_template("ho_mapping.html", ho_map=ho_map)
 
 
+@app.route("/rre_results")
+def rre_results():
+    """Display RRE (RRC Re-Establishment) mapping results."""
+    global rre_mapping_results, rre_edge_cases_global, rre_edge_case_mappings_global, drx_messages, last_analysis_snapshot
+    
+    # Get RRE mappings from global or snapshot
+    mappings = rre_mapping_results if rre_mapping_results else (
+        last_analysis_snapshot.get('rre_mapping_results', []) if last_analysis_snapshot else []
+    )
+    
+    # Get RRE edge cases from global or snapshot
+    edge_cases = rre_edge_cases_global if rre_edge_cases_global else (
+        last_analysis_snapshot.get('rre_edge_cases_global', []) if last_analysis_snapshot else []
+    )
+    
+    # Get RRE edge case mappings from global or snapshot
+    edge_case_mappings = rre_edge_case_mappings_global if rre_edge_case_mappings_global else (
+        last_analysis_snapshot.get('rre_edge_case_mappings_global', []) if last_analysis_snapshot else []
+    )
+    
+    return render_template("rre_results.html", 
+                          rre_mappings=mappings, 
+                          rre_edge_cases=edge_cases,
+                          rre_edge_case_mappings=edge_case_mappings)
+
+
+@app.route("/drx_status")
+def drx_status():
+    """Display DRX (Discontinuous Reception) status view."""
+    global drx_messages, last_analysis_snapshot
+    
+    # Get DRX messages from global or snapshot
+    drx_data = drx_messages if drx_messages else (
+        last_analysis_snapshot.get('drx_messages', []) if last_analysis_snapshot else []
+    )
+    
+    # Organize DRX messages by UE index
+    drx_by_ue = {}
+    for drx_msg in drx_data:
+        ue_idx = drx_msg['ue_index']
+        if ue_idx not in drx_by_ue:
+            drx_by_ue[ue_idx] = []
+        drx_by_ue[ue_idx].append(drx_msg)
+    
+    # Sort messages within each UE by timestamp
+    for ue_idx in drx_by_ue:
+        drx_by_ue[ue_idx] = sorted(drx_by_ue[ue_idx], key=lambda x: x['timestamp'])
+    
+    # Sort UE indices
+    sorted_ue_indices = sorted(drx_by_ue.keys())
+    
+    return render_template("drx_status.html", 
+                         drx_by_ue=drx_by_ue, 
+                         ue_indices=sorted_ue_indices,
+                         total_ues=len(sorted_ue_indices),
+                         total_messages=len(drx_data))
+
+
 @app.route("/rrm_debug")
 def rrm_debug():
     """Show RRM correlation debug information."""
@@ -2274,7 +3136,10 @@ def rrm_debug():
     # Extract L3 admission timestamps for each UE
     l3_admission_reqs = {}
     if data_map:
+        # Filter out non-integer keys
         for ue_index, blocks in data_map.items():
+            if not isinstance(ue_index, int):
+                continue
             for block in blocks:
                 timestamp = rrm_parser.extract_l3_admission_timestamp(block)
                 if timestamp:
@@ -2352,7 +3217,10 @@ def generate_ue_summary(data_map):
         'rrc_conn_release': 0, 'failures': 0,
     }
 
-    for ue_index in sorted(data_map.keys()):
+    # Filter out non-integer keys and sort
+    ue_indices = sorted([k for k in data_map.keys() if isinstance(k, int)])
+    
+    for ue_index in ue_indices:
         blocks = data_map[ue_index]
         
         # OPTIMIZED: Single-pass message counting instead of building huge all_text string
@@ -2858,7 +3726,12 @@ def extract_ue_milestones(data_map, ue_index):
     """
     Extract ordered milestone events for a UE from parsed journey blocks.
     Add more milestone patterns in MILESTONE_PATTERNS.
+    
+    UPDATED: Now also includes DRX messages from RRM logs for this UE.
+    DRX messages are appended after L3 milestones and sorted by timestamp within themselves.
     """
+    global drx_messages, last_analysis_snapshot
+    
     events = []
     blocks = data_map.get(ue_index, [])
     sequence = 1
@@ -2884,11 +3757,36 @@ def extract_ue_milestones(data_map, ue_index):
                     "file": getattr(row, "File", ""),
                     "line": getattr(row, "Line", ""),
                     "message": msg,
+                    "source": "L3",  # Mark as L3 source for color coding
                 })
                 sequence += 1
 
                 if occur == 1:
                     seen_patterns.add(pattern_name)
+
+    # Add DRX messages for this UE (sorted by timestamp within themselves)
+    # Use live drx_messages or fall back to snapshot
+    current_drx_messages = drx_messages if drx_messages else (
+        last_analysis_snapshot.get('drx_messages', []) if last_analysis_snapshot else []
+    )
+    ue_drx_messages = [drx for drx in current_drx_messages if drx['ue_index'] == ue_index]
+    
+    if ue_drx_messages:
+        # Sort DRX messages by timestamp
+        ue_drx_messages_sorted = sorted(ue_drx_messages, key=lambda x: x['timestamp'])
+        
+        # Append DRX messages to events
+        for drx_msg in ue_drx_messages_sorted:
+            events.append({
+                "sequence": sequence,
+                "milestone": "DRX Event",
+                "timestamp": drx_msg['timestamp'],
+                "file": drx_msg['file'],
+                "line": drx_msg['line'],
+                "message": drx_msg['message'],
+                "source": "RRM",  # Mark as RRM source for color coding
+            })
+            sequence += 1
 
     return events
 
