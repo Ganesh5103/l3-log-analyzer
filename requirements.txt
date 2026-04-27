@@ -1,0 +1,19 @@
+# ============================================================
+# L3 Log Analyzer – runtime dependencies
+# Compatible with Python 3.10+
+# ============================================================
+
+# Web framework
+flask>=2.3.0
+werkzeug>=2.3.0
+
+# Data processing
+pandas>=2.0.0
+
+# SSH / SCP remote download
+paramiko>=3.4.0
+
+# ============================================================
+# Dev / packaging  (not needed at runtime inside the .exe)
+# ============================================================
+pyinstaller>=6.0.0

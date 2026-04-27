@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Build & dist
+build/
+dist/
+*.spec
+*.exe
+
+# Uploaded/generated data
+uploads/
+converted/
+generated_logs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs
+*.log

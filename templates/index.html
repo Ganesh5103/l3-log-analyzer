@@ -1,0 +1,219 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Analysis Results - Tejas L3 Analyzer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Bootstrap 5 CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg sticky-top navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">
+            <i class="bi bi-diagram-3-fill"></i> Tejas L3 Log Analyzer
+        </a>
+        <div class="d-flex">
+            <a href="{{ url_for('search_data') }}" class="btn btn-outline-warning btn-sm me-2">
+                <i class="bi bi-search"></i> Search Data
+            </a>
+            <a href="{{ url_for('upload_page') }}" class="btn btn-outline-light btn-sm me-2">
+                <i class="bi bi-upload"></i> New Upload
+            </a>
+            <a href="{{ url_for('ue_summary') }}" class="btn btn-outline-info btn-sm me-2">
+                <i class="bi bi-clipboard-data"></i> UE Summary
+            </a>
+            <a href="{{ url_for('ho_mapping') }}" class="btn btn-outline-light btn-sm me-2">
+                <i class="bi bi-arrow-left-right"></i> HO Results
+            </a>
+            <a href="{{ url_for('rre_results') }}" class="btn btn-outline-success btn-sm">
+                <i class="bi bi-recycle"></i> RRE Results
+            </a>
+            {% if drx_has_data %}
+            <a href="{{ url_for('drx_status') }}" class="btn btn-outline-primary btn-sm ms-2">
+                <i class="bi bi-battery-charging"></i> DRX_STATUS
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</nav>
+
+<main class="container my-5">
+  <div class="row g-4">
+    <!-- Left Column: RRC Drop Rates -->
+    <div class="col-lg-6" style="flex: 0 0 50%; max-width: 50%;">
+      <section class="mb-4">
+        <div class="card bg-light border border-primary-subtle shadow-sm h-100">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h4 class="card-title text-primary fw-bold mb-0">📉 RRC Drop Rates</h4>
+              <!-- Navigate to full counters page -->
+              <a href="{{ url_for('rrc_counters') }}" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-list"></i> Show Counters
+              </a>
+            </div>
+
+            <div class="table-responsive" style="max-height: calc(100vh - 200px); overflow-y: auto;">
+              <table class="table table-sm table-striped">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th class="text-end">COMPLETED</th>
+                    <th class="text-end">REQUESTED</th>
+                    <th class="text-end">Ratio %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% if rrc_drop_rates %}
+                    {% for name, value in rrc_drop_rates.items() %}
+                      {# normalize to formatted string whether value is dict or string #}
+                      {% if value is mapping %}
+                        {% set formatted = value.formatted if value.formatted is defined else 'N/A' %}
+                      {% else %}
+                        {% set formatted = value %}
+                      {% endif %}
+
+                      {% if formatted != 'N/A' %}
+                        {% set parts = formatted.split() %}
+                        {% set ratio = parts[0] %}
+                        {% set counts = parts[1] | replace('(', '') | replace(')', '') %}
+                        {% set nums = counts.split('/') %}
+                        {% set num = nums[0] %}
+                        {% set den = nums[1] %}
+                      {% else %}
+                        {% set ratio = 'N/A' %}
+                        {% set num = '-' %}
+                        {% set den = '-' %}
+                      {% endif %}
+                      <tr>
+                        <td class="text-start"><strong>{{ name }}</strong></td>
+                        <td class="text-end">{{ num }}</td>
+                        <td class="text-end">{{ den }}</td>
+                        <td class="text-end">{{ ratio }}</td>
+                      </tr>
+                    {% endfor %}
+                  {% else %}
+                    <tr>
+                      <td colspan="4" class="text-muted text-center">No drop-rate data available.</td>
+                    </tr>
+                  {% endif %}
+                </tbody>
+              </table>
+            </div>
+
+            <p class="small text-muted mt-3">Tip: click "Show Counters" to view raw RRC message counts.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Right Column: Deep Dive and Downloads -->
+    <div class="col-lg-6" style="flex: 0 0 50%; max-width: 50%;">
+      <!-- Deep Dive Section -->
+      <section class="mb-4">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h4 class="card-title fw-bold text-primary">🔬 Deep Dive</h4>
+            <p class="card-text small text-muted">
+             <strong> Generate a visual sequence diagram of module communications for a specific UE.</strong></p>
+            </p>
+            <a href="{{ url_for('ue_stats') }}" class="btn btn-primary text-white w-100">
+              <i class="bi bi-bar-chart-line-fill"></i> View Flow Diagram
+            </a>
+            <a href="{{ url_for('milestones') }}" class="btn btn-outline-primary w-100 mt-2">
+              <i class="bi bi-signpost-2"></i> View UE Milestones
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- Downloads Section -->
+      <section>
+        <div class="card shadow-sm">
+          <div class="card-body">
+              {% if valid_indices %}
+          <div class="form-text mt-3">
+            <strong>Available Indices:</strong> <span class="text-monospace">{{ valid_indices | join(', ') }}</span>
+          </div>
+          {% endif %}
+            <h4 class="card-title fw-bold text-primary">⬇️ Downloads</h4>
+            <!-- UE Journey Download -->
+            <form action="/generate_and_download_txt" method="post" class="mb-3">
+              <div class="input-group">
+                <input name="ue_index" type="number" class="form-control" placeholder="UE Index" required>
+                <button type="submit" class="btn btn-primary text-white">Download .txt</button>
+              </div>
+            </form>
+            <p class="small text-muted mb-2"><strong>All your UEs' journey summary:</strong></p>
+            <!-- Summary Download -->
+            <a href="{{ url_for('summary') }}" class="btn btn-primary text-white w-100">
+              <i class="bi bi-file-earmark-zip-fill"></i> Download Full Summary
+            </a>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- UE Insights Section -->
+  <!-- <div class="row mt-4">
+    <div class="col-12">
+      <section id="insights">
+        <div class="card bg-light border border-primary-subtle shadow-sm">
+          <div class="card-body">
+            <h2 class="mb-3 text-primary fw-bold">
+              <i class="bi bi-lightbulb-fill"></i> UE Insights
+            </h2>
+            <div class="accordion" id="ueAccordion">
+              {% if detailed_insights %}
+                {% for block in detailed_insights %}
+                  {% set ue_id = loop.index %}
+                  <div class="accordion-item mb-2">
+                    <h2 class="accordion-header" id="heading{{ ue_id }}">
+                      <button class="accordion-button {% if '❌' not in block %}collapsed{% endif %}"
+                        type="button" data-bs-toggle="collapse"
+                        data-bs-target="#collapse{{ ue_id }}">
+                        {% if "❌" in block %}
+                          <span class="badge bg-danger me-2">Issue</span>
+                        {% else %}
+                          <span class="badge bg-success me-2">Normal</span>
+                        {% endif %}
+                        {{ block.split('\n')[0] }}
+                      </button>
+                    </h2>
+                    <div id="collapse{{ ue_id }}"
+                      class="accordion-collapse collapse {% if '❌' in block %}show{% endif %}"
+                      data-bs-parent="#ueAccordion">
+                      <div class="accordion-body">
+                        <pre class="p-3 border rounded small bg-white">{{ block }}</pre>
+                      </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <p class="text-muted">No insights generated.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div> -->
+</main>
+
+<footer class="mt-5">
+    © Tejas Networks Log Analyzer | All Rights Reserved
+</footer>
+
+<script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+</body>
+</html>

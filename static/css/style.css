@@ -1,0 +1,192 @@
+/* static/css/style.css */
+
+/* --- Base & Typography --- */
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    color: #0d2c4b;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    position: relative;
+    background-color: #eef5ff; /* Fallback color */
+}
+
+/* --- Background Image --- */
+body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url("../images/image\ copy.png"); /* Ensure you have this image */
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0.7;
+    z-index: -1;
+}
+
+/* --- Main Layout --- */
+main {
+    flex: 1;
+}
+
+/* --- Navbar --- */
+.navbar {
+    background-color: rgba(0, 33, 66, 0.85); /* Semi-transparent dark blue */
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    
+}
+
+.navbar-brand {
+    color: white !important;
+    font-weight: 600;
+}
+
+/* Navbar buttons styling - colored by function, same before and after hover */
+.navbar .btn-outline-light,
+.navbar .btn-outline-warning,
+.navbar .btn-outline-info,
+.navbar .btn-outline-success,
+.navbar .btn-outline-primary {
+    color: white !important;
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Search Data button - amber */
+.navbar .btn-outline-warning {
+    background-color: #ffc107 !important;
+    color: #1a1a1a !important;
+}
+
+/* Upload button - gray */
+.navbar a[href*="upload_page"].btn-outline-light {
+    background-color: #6c757d !important;
+    color: white !important;
+}
+
+/* UE Summary button - cyan */
+.navbar .btn-outline-info {
+    background-color: #17a2b8 !important;
+    color: white !important;
+}
+
+/* HO Results button - teal */
+.navbar a[href*="ho_mapping"].btn-outline-light {
+    background-color: #20c997 !important;
+    color: white !important;
+}
+
+/* RRE Results button - green */
+.navbar .btn-outline-success {
+    background-color: #28a745 !important;
+    color: white !important;
+}
+
+/* DRX_STATUS button - blue */
+.navbar .btn-outline-primary {
+    background-color: #007bff !important;
+    color: white !important;
+}
+
+/* Back buttons - dark gray */
+.navbar a[href*="show_results"].btn-outline-light,
+.navbar a[href*="ue_summary"].btn-outline-light {
+    background-color: #495057 !important;
+    color: white !important;
+}
+
+/* Other outline-light buttons (default) */
+.navbar .btn-outline-light {
+    background-color: #6c757d !important;
+    color: white !important;
+}
+
+/* Hover state - same colors, just slight opacity change for feedback */
+.navbar .btn:hover {
+    opacity: 0.9 !important;
+}
+
+/* --- Cards with Frosted Glass Effect --- */
+.card {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.7); /* Semi-transparent white */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px 0 rgba(0, 20, 80, 0.2);
+}
+
+.card-header, .card-footer {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* --- Buttons & Forms --- */
+.btn-primary {
+    background-color: #0059b3;
+    border-color: #0059b3;
+}
+.btn-primary:hover {
+    background-color: #004080;
+    border-color: #004080;
+}
+
+.form-control {
+    background-color: rgba(255, 255, 255, 0.8);
+    border: 1px solid #ced4da;
+}
+.form-control:focus {
+    background-color: white;
+    box-shadow: 0 0 0 0.25rem rgba(0, 89, 179, 0.25);
+}
+
+/* --- Accordion Styling --- */
+.accordion-item {
+    background-color: transparent;
+    border: none;
+}
+.accordion-button {
+    background-color: rgba(255, 255, 255, 0.5);
+    border-radius: 8px !important;
+}
+.accordion-button:not(.collapsed) {
+    background-color: #0059b3;
+    color: white;
+}
+.accordion-body {
+    background-color: rgba(255, 255, 255, 0.4);
+    border-radius: 0 0 8px 8px;
+}
+
+/* --- Footer --- */
+footer {
+  width: 100%;
+  background: #002142;
+  color: white;
+  text-align: center;
+  padding: 10px;
+  margin-top: auto;
+}
+
+/* --- Mermaid Diagram --- */
+.mermaid-container {
+    background-color: #ffffff; /* Solid white for readability */
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+/* --- Utility Classes --- */
+.text-shadow {
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
+}
